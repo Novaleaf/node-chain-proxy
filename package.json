@@ -2,10 +2,7 @@
   "name": "chain-proxy",
   "version": "0.0.1",
   "description": "Hard port of http-mitm-proxy to Typescript (+ bugfixes, +features)",
-  "author": {
-    "name": "Jason Swearingen",
-    "email": "jasons@novaleaf.com"
-  },
+  "author": "Jason Swearingen <jasons@novaleaf.com>",
   "dependencies": {
     "@types/async": "^2.0.40",
     "@types/mkdirp": "^0.3.29",
@@ -26,6 +23,24 @@
     "test": "mocha ./dist/**/*.js --watch",
     "docs": "typedoc "
   },
-  "private": true,
-  "main": "./dist/_index.js"
+  "private": false,
+  "main": "./dist/_index.js",
+  "types": "./dist/_index.d.ts",
+
+  "repository": {
+    "type": "git",
+    "url": "git+https://jasonswearingen@github.com/Novaleaf/node-chain-proxy.git"
+  },
+  "keywords": [
+    "proxy",
+    "upstream",
+    "chain",
+    "mitm",
+    "https"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Novaleaf/node-chain-proxy/issues"
+  },
+  "homepage": "https://github.com/Novaleaf/node-chain-proxy#readme"
 }

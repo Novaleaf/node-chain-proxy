@@ -1,4 +1,5 @@
 ﻿
+
 # what
 
 hard port of ```node-http-mitm-proxy``` (v0.5.2)  https://www.npmjs.com/package/http-mitm-proxy 
@@ -16,7 +17,7 @@ We used ```node-http-mitm-proxy``` but issue support + bugfixes is slow.  That c
 - customize CA
 - allow api to be used with Promises (currently callback only)
 - remove usage of async library in favor of Bluebird (Promises)
-- Forward HTTPS requests without expensive MITM layer.  (**help requested!**)
+- Forward HTTPS requests to upstream proxy without expensive MITM layer.  (**help requested!**)
 - Continued feature parity with https://www.npmjs.com/package/http-mitm-proxy : *bugfixes / feature ports as added to the  code or issue tracker*
 - get inspiration from https://github.com/alibaba/anyproxy
 
