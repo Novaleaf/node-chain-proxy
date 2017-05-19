@@ -23,6 +23,8 @@
     <Content Include="tsconfig.json" />
     <Content Include="README.md" />
     <TypeScriptCompile Include="src\ca.ts" />
+    <TypeScriptCompile Include="src\middleware\gunzip.ts" />
+    <TypeScriptCompile Include="src\middleware\wildcard.ts" />
     <TypeScriptCompile Include="src\proxy.ts" />
     <TypeScriptCompile Include="src\_index.ts" />
     <TypeScriptCompile Include="custom-dts\http-mitm-proxy\index.d.ts" />
@@ -35,6 +37,7 @@
     <Folder Include="devops" />
     <Folder Include="scratch" />
     <Folder Include="src" />
+    <Folder Include="src\middleware\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.Common.targets" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <!--Do not delete the following Import Project.  While this appears to do nothing it is a marker for setting TypeScript properties before our import that depends on them.-->
