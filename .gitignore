@@ -1,0 +1,6 @@
+node_modules/
+obj/
+typings/
+.git/
+.http-mitm-proxy/
+certstore/
