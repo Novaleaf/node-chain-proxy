@@ -1,4 +1,6 @@
 ﻿
+# what
+
 hard port of ```node-http-mitm-proxy``` (v0.5.2)  https://www.npmjs.com/package/http-mitm-proxy 
 
 # why
@@ -25,6 +27,30 @@ Expect the codebase to diverge from ```node-http-mitm-proxy``` over time due to 
 When possible, we will manually integrate patches from ```node-http-mitm-proxy``` into this codebase.  (Applying Pull requests isn't possible due to refactoring to Typescript/ES6)
 
 
+# install
 
+```bash
+npm install --save chain-proxy
+```
 
+# example
 
+```typescript
+import Proxy = require("chain-proxy");
+let proxy = new Proxy();
+```
+
+# usage
+
+currently is a superset of https://github.com/joeferner/node-http-mitm-proxy so read it's docs/readme for general usage.   
+
+will rewrite docs later when/if api diverges. 
+
+# license
+
+MIT
+
+# credits
+
+- code written by JasonS <aat> novaleaf <doot coom>
+- original idea from Joe Ferner.  see https://github.com/joeferner/node-http-mitm-proxy
