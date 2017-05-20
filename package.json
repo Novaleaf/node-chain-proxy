@@ -1,6 +1,6 @@
 {
   "name": "chain-proxy",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Hard port of http-mitm-proxy to Typescript (+ bugfixes, +features)",
   "author": "Jason Swearingen <jasons@novaleaf.com>",
   "dependencies": {
@@ -26,7 +26,6 @@
   "private": false,
   "main": "./src/_index.js",
   "types": "./src/_index.ts",
-
   "repository": {
     "type": "git",
     "url": "git+https://jasonswearingen@github.com/Novaleaf/node-chain-proxy.git"
