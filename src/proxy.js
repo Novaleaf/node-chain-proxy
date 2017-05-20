@@ -711,7 +711,11 @@ var Proxy = (function (_super) {
                 //console.log(`testing and FAIL!!!!!!!!!!!!! ${h}`);
             }
         }
-        delete headers['content-length'];
+        //fix ajax requests, see: https://github.com/joeferner/node-http-mitm-proxy/issues/111#issuecomment-298185361
+        if (headers["transfer-encoding"] === "chunked") {
+            //console.log("\n\n  CHUNKED!!!!!  deleting content-length !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!  \n\n\n", headers);
+            delete headers['content-length'];
+        }
         ctx.proxyToServerRequestOptions = {
             method: ctx.clientToProxyRequest.method,
             path: ctx.clientToProxyRequest.url,

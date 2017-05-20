@@ -15,7 +15,6 @@ We used ```node-http-mitm-proxy``` but issue support + bugfixes is slow.  That c
 
 # ToDo
 - add onAuth callback to Proxy object (auth ignored if not set)
-- customize CA
 - allow api to be used with Promises (currently callback only)
 - remove usage of async library in favor of Bluebird (Promises)
 - Forward HTTPS requests to upstream proxy without expensive MITM layer.  (**help requested!**)

@@ -625,7 +625,7 @@ export class Proxy<TTags> extends ProxyBase<TTags> {
 			self.onCertificateRequired(hostname, function (err, files) {
 				async.auto({
 					'keyFileExists': function (callback) {
-						
+
 						return fs.exists(files.keyFile, function (exists) {
 							return callback(null, exists);
 						});
@@ -832,7 +832,11 @@ export class Proxy<TTags> extends ProxyBase<TTags> {
 				//console.log(`testing and FAIL!!!!!!!!!!!!! ${h}`);
 			}
 		}
-		delete headers['content-length'];
+		//fix ajax requests, see: https://github.com/joeferner/node-http-mitm-proxy/issues/111#issuecomment-298185361
+		if (headers["transfer-encoding"] === "chunked") {
+			//console.log("\n\n  CHUNKED!!!!!  deleting content-length !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!  \n\n\n", headers);
+			delete headers['content-length'];
+		}
 
 
 		ctx.proxyToServerRequestOptions = {
