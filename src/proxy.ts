@@ -1,4 +1,6 @@
 import xlib = require("xlib");
+//import slib = require("slib");
+//import fsPromise = slib.file.fsPromise;
 
 import _ = xlib.lodash;
 import __ = xlib.lolo;
@@ -42,7 +44,6 @@ export interface ICertificateMissingHint {
 
 
 
-
 export interface IProxyOptions {
 	/**port - The port or named socket to listen on (default: 8080).*/
 	port?: number;
@@ -64,6 +65,9 @@ export interface IProxyOptions {
 	forceSNI?: boolean;
 	/**  - The port or named socket for https server to listen on. (forceSNI must be enabled) */
 	httpsPort?: number;
+	/** if a new CA cert needs to be generated (not existing in given ```sslCaDir```) what name should it use.
+	if not specified, the name "Chain Proxy" is used. */
+	sslCaName?: string;
 }
 
 
@@ -167,12 +171,12 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (context: 
 	};
 
 	/** Adds a function to get called at the beginning of the response.
-    
+	
 	Arguments
-    
+	
 	fn(ctx, callback) - The function that gets called on each response.
 	Example
-    
+	
 	proxy.onResponse(function(ctx, callback) {
 	  console.log('BEGIN RESPONSE');
 	  return callback();
@@ -411,6 +415,10 @@ export class Proxy<TTags> extends ProxyBase<TTags> {
 	/** Starts the proxy listening on the given port..  example: proxy.listen({ port: 80 }); */
 	public listen(options: IProxyOptions = {}, callback?: (err?: Error) => void) {
 
+		if (options.sslCaName == null) {
+			options.sslCaName = "Chain Proxy";
+		}
+
 		var self = this;
 
 		this.options = options;
@@ -427,7 +435,7 @@ export class Proxy<TTags> extends ProxyBase<TTags> {
 		}
 		this.httpsPort = this.forceSNI ? options.httpsPort : undefined;
 		this.sslCaDir = options.sslCaDir || path.resolve(process.cwd(), '.certstore');
-		new ca.CA(this.sslCaDir, function (err, ca) {
+		new ca.CA(this.sslCaDir, options.sslCaName, function (err, ca) {
 			if (err) {
 				if (callback == null) {
 					throw err;
@@ -484,9 +492,9 @@ export class Proxy<TTags> extends ProxyBase<TTags> {
 
 	/** proxy.close
 			Stops the proxy listening.
-		    
+			
 			Example
-		    
+			
 			proxy.close(); */
 	public close() {
 		var self = this;
@@ -617,6 +625,7 @@ export class Proxy<TTags> extends ProxyBase<TTags> {
 			self.onCertificateRequired(hostname, function (err, files) {
 				async.auto({
 					'keyFileExists': function (callback) {
+						
 						return fs.exists(files.keyFile, function (exists) {
 							return callback(null, exists);
 						});

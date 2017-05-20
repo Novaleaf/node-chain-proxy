@@ -14,7 +14,7 @@
     "proxy-agent": "^2.0.0",
     "semaphore": "^1.0.5",
     "ws": "^2.3.1",
-    "xlib": "^8.4.2"
+    "xlib": "^9.0.0"
   },
   "devDependencies": {
     "mocha": "^3.0.2"
@@ -24,8 +24,8 @@
     "docs": "typedoc "
   },
   "private": false,
-  "main": "./dist/_index.js",
-  "types": "./dist/_index.d.ts",
+  "main": "./src/_index.js",
+  "types": "./src/_index.ts",
 
   "repository": {
     "type": "git",

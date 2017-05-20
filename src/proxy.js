@@ -315,6 +315,9 @@ var Proxy = (function (_super) {
     /** Starts the proxy listening on the given port..  example: proxy.listen({ port: 80 }); */
     Proxy.prototype.listen = function (options, callback) {
         if (options === void 0) { options = {}; }
+        if (options.sslCaName == null) {
+            options.sslCaName = "Chain Proxy";
+        }
         var self = this;
         this.options = options;
         this.silent = !!options.silent;
@@ -329,7 +332,7 @@ var Proxy = (function (_super) {
         }
         this.httpsPort = this.forceSNI ? options.httpsPort : undefined;
         this.sslCaDir = options.sslCaDir || path.resolve(process.cwd(), '.certstore');
-        new ca.CA(this.sslCaDir, function (err, ca) {
+        new ca.CA(this.sslCaDir, options.sslCaName, function (err, ca) {
             if (err) {
                 if (callback == null) {
                     throw err;

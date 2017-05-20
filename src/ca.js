@@ -7,102 +7,104 @@ var Forge = require("node-forge");
 var pki = Forge.pki;
 var mkdirp = require("mkdirp");
 var async = require("async");
-var CAattrs = [{
-        name: 'commonName',
-        value: 'ChainProxyCA'
-    }, {
-        name: 'countryName',
-        value: 'Internet'
-    }, {
-        shortName: 'ST',
-        value: 'Internet'
-    }, {
-        name: 'localityName',
-        value: 'Internet'
-    }, {
-        name: 'organizationName',
-        value: 'Chain Proxy CA'
-    }, {
-        shortName: 'OU',
-        value: 'CA'
-    }];
-var CAextensions = [{
-        name: 'basicConstraints',
-        cA: true
-    }, {
-        name: 'keyUsage',
-        keyCertSign: true,
-        digitalSignature: true,
-        nonRepudiation: true,
-        keyEncipherment: true,
-        dataEncipherment: true
-    }, {
-        name: 'extKeyUsage',
-        serverAuth: true,
-        clientAuth: true,
-        codeSigning: true,
-        emailProtection: true,
-        timeStamping: true
-    }, {
-        name: 'nsCertType',
-        client: true,
-        server: true,
-        email: true,
-        objsign: true,
-        sslCA: true,
-        emailCA: true,
-        objCA: true
-    }, {
-        name: 'subjectKeyIdentifier'
-    }];
-var ServerAttrs = [{
-        name: 'countryName',
-        value: 'Internet'
-    }, {
-        shortName: 'ST',
-        value: 'Internet'
-    }, {
-        name: 'localityName',
-        value: 'Internet'
-    }, {
-        name: 'organizationName',
-        value: 'Chain Proxy CA'
-    }, {
-        shortName: 'OU',
-        value: 'Chain Proxy Server Certificate'
-    }];
-var ServerExtensions = [{
-        name: 'basicConstraints',
-        cA: false
-    }, {
-        name: 'keyUsage',
-        keyCertSign: false,
-        digitalSignature: true,
-        nonRepudiation: false,
-        keyEncipherment: true,
-        dataEncipherment: true
-    }, {
-        name: 'extKeyUsage',
-        serverAuth: true,
-        clientAuth: true,
-        codeSigning: false,
-        emailProtection: false,
-        timeStamping: false
-    }, {
-        name: 'nsCertType',
-        client: true,
-        server: true,
-        email: false,
-        objsign: false,
-        sslCA: false,
-        emailCA: false,
-        objCA: false
-    }, {
-        name: 'subjectKeyIdentifier'
-    }];
+var xlib = require("xlib");
 var CA = (function () {
-    function CA(baseCAFolder, callback) {
+    function CA(baseCAFolder, caName, callback) {
         this.baseCAFolder = baseCAFolder;
+        this.caName = caName;
+        this.CAattrs = [{
+                name: 'commonName',
+                value: xlib.stringHelper.toId(caName) + "CA"
+            }, {
+                name: 'countryName',
+                value: 'Internet'
+            }, {
+                shortName: 'ST',
+                value: 'Internet'
+            }, {
+                name: 'localityName',
+                value: 'Internet'
+            }, {
+                name: 'organizationName',
+                value: caName + " CA"
+            }, {
+                shortName: 'OU',
+                value: 'CA'
+            }];
+        this.CAextensions = [{
+                name: 'basicConstraints',
+                cA: true
+            }, {
+                name: 'keyUsage',
+                keyCertSign: true,
+                digitalSignature: true,
+                nonRepudiation: true,
+                keyEncipherment: true,
+                dataEncipherment: true
+            }, {
+                name: 'extKeyUsage',
+                serverAuth: true,
+                clientAuth: true,
+                codeSigning: true,
+                emailProtection: true,
+                timeStamping: true
+            }, {
+                name: 'nsCertType',
+                client: true,
+                server: true,
+                email: true,
+                objsign: true,
+                sslCA: true,
+                emailCA: true,
+                objCA: true
+            }, {
+                name: 'subjectKeyIdentifier'
+            }];
+        this.ServerAttrs = [{
+                name: 'countryName',
+                value: 'Internet'
+            }, {
+                shortName: 'ST',
+                value: 'Internet'
+            }, {
+                name: 'localityName',
+                value: 'Internet'
+            }, {
+                name: 'organizationName',
+                value: caName + " CA"
+            }, {
+                shortName: 'OU',
+                value: caName + " Server Certificate"
+            }];
+        this.ServerExtensions = [{
+                name: 'basicConstraints',
+                cA: false
+            }, {
+                name: 'keyUsage',
+                keyCertSign: false,
+                digitalSignature: true,
+                nonRepudiation: false,
+                keyEncipherment: true,
+                dataEncipherment: true
+            }, {
+                name: 'extKeyUsage',
+                serverAuth: true,
+                clientAuth: true,
+                codeSigning: false,
+                emailProtection: false,
+                timeStamping: false
+            }, {
+                name: 'nsCertType',
+                client: true,
+                server: true,
+                email: false,
+                objsign: false,
+                sslCA: false,
+                emailCA: false,
+                objCA: false
+            }, {
+                name: 'subjectKeyIdentifier'
+            }];
         var _self = this;
         _self.certsFolder = path.join(baseCAFolder, 'certs');
         _self.keysFolder = path.join(baseCAFolder, 'keys');
@@ -148,9 +150,9 @@ var CA = (function () {
             cert.validity.notBefore.setDate(cert.validity.notBefore.getDate() - 1);
             cert.validity.notAfter = new Date();
             cert.validity.notAfter.setFullYear(cert.validity.notBefore.getFullYear() + 20);
-            cert.setSubject(CAattrs);
-            cert.setIssuer(CAattrs);
-            cert.setExtensions(CAextensions);
+            cert.setSubject(self.CAattrs);
+            cert.setIssuer(self.CAattrs);
+            cert.setExtensions(self.CAextensions);
             cert.sign(keys.privateKey, Forge.md.sha256.create());
             self.CAcert = cert;
             self.CAkeys = keys;
@@ -200,14 +202,14 @@ var CA = (function () {
         certServer.validity.notBefore.setDate(certServer.validity.notBefore.getDate() - 1);
         certServer.validity.notAfter = new Date();
         certServer.validity.notAfter.setFullYear(certServer.validity.notBefore.getFullYear() + 2);
-        var attrsServer = ServerAttrs.slice(0);
+        var attrsServer = self.ServerAttrs.slice(0);
         attrsServer.unshift({
             name: 'commonName',
             value: mainHost
         });
         certServer.setSubject(attrsServer);
         certServer.setIssuer(this.CAcert.issuer.attributes);
-        certServer.setExtensions(ServerExtensions.concat([{
+        certServer.setExtensions(self.ServerExtensions.concat([{
                 name: 'subjectAltName',
                 altNames: hosts.map(function (host) {
                     if (host.match(/^[\d\.]+$/)) {
