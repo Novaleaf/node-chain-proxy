@@ -17,6 +17,7 @@
     "watch": false,
     "moduleResolution": "node",
     "forceConsistentCasingInFileNames": true,
+    //can't use outDir/rootDir with .ts files used for definitions.   see: https://github.com/Microsoft/TypeScript/issues/6496#issuecomment-302886203
     //"outDir": "./dist",
     //"rootDir": "./src",
 

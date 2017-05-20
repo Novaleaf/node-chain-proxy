@@ -3,6 +3,11 @@
   "version": "0.0.2",
   "description": "Hard port of http-mitm-proxy to Typescript (+ bugfixes, +features)",
   "author": "Jason Swearingen <jasons@novaleaf.com>",
+  "contributors": [
+    "Joe Ferner <joe@fernsroth.com>",
+    "Félicien François <felicien@tweakstyle.com>",
+    "Simon Pratt <simon@pr4tt.com>"
+  ],
   "dependencies": {
     "@types/async": "^2.0.40",
     "@types/mkdirp": "^0.3.29",

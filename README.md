@@ -7,10 +7,11 @@ hard port of ```node-http-mitm-proxy``` (v0.5.2)  https://www.npmjs.com/package/
 # why
 We used ```node-http-mitm-proxy``` but issue support + bugfixes is slow.  That combined with the use of archaic ES3 style classes nessesitated a rewrite which we can support and add features to.
 
-# New features
+# New features *(done)*
 - Written in Typescript (integral type Definitions and ES6 classes).  Still works with legacy ES3 environments.
-- add user defined "tags" object to ctx
-- add url to context (ease of use)
+- add user defined "tags" object to ctx.  Example:  ```ctx.tags.myKey="my value";```
+- add url to context (ease of use).  Example: ```console.log(ctx.url.href);```
+- customize the CA via ```listenOptions.sslCaName``` (only used when CA cert doesn't exist, IE at first run).  Example:  ```proxy.listen({ port, keepAlive: true, forceSNI: true, timeout: 60000, sslCaName:"Scale Proxy" });```
 
 # ToDo
 - add onAuth callback to Proxy object (auth ignored if not set)
