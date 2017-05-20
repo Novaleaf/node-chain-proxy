@@ -43,8 +43,8 @@ export interface ICertificateMissingHint {
 }
 
 
-
-export interface IProxyOptions {
+/** configuration options you pass to the .listen() method*/
+export interface IProxyListenOptions {
 	/**port - The port or named socket to listen on (default: 8080).*/
 	port?: number;
 	/**host - The hostname or local address to listen on.*/
@@ -392,7 +392,7 @@ export class Proxy<TTags> extends ProxyBase<TTags> {
 	public onConnectHandlers: ((req: http.IncomingMessage, socket: net.Socket, head: any, callback: (error: Error | undefined) => void) => void)[] = [];
 
 
-	public options: IProxyOptions;
+	public options: IProxyListenOptions;
 	public silent: boolean;
 	public httpPort: number;
 	public timeout: number;
@@ -413,7 +413,7 @@ export class Proxy<TTags> extends ProxyBase<TTags> {
 	//???
 	private wssServer: any;
 	/** Starts the proxy listening on the given port..  example: proxy.listen({ port: 80 }); */
-	public listen(options: IProxyOptions = {}, callback?: (err?: Error) => void) {
+	public listen(options: IProxyListenOptions = {}, callback?: (err?: Error) => void) {
 
 		if (options.sslCaName == null) {
 			options.sslCaName = "Chain Proxy";

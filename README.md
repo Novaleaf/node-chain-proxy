@@ -11,7 +11,7 @@ We used ```node-http-mitm-proxy``` but issue support + bugfixes is slow.  That c
 - Written in Typescript (integral type Definitions and ES6 classes).  Still works with legacy ES3 environments.
 - add user defined "tags" object to ctx.  Example:  ```ctx.tags.myKey="my value";```
 - add url to context (ease of use).  Example: ```console.log(ctx.url.href);```
-- customize the CA via ```listenOptions.sslCaName``` (only used when CA cert doesn't exist, IE at first run).  Example:  ```proxy.listen({ port, keepAlive: true, forceSNI: true, timeout: 60000, sslCaName:"Scale Proxy" });```
+- customize the CA via ```listenOptions.sslCaName``` (only used when CA cert doesn't exist, IE at first run).  Example:  ```proxy.listen({ port, keepAlive: true, forceSNI: true, timeout: 60000, sslCaName:"My Special Proxy" });```
 
 # ToDo
 - add onAuth callback to Proxy object (auth ignored if not set)
@@ -25,7 +25,7 @@ We used ```node-http-mitm-proxy``` but issue support + bugfixes is slow.  That c
 Expect the codebase to diverge from ```node-http-mitm-proxy``` over time due to the following goals:
 - focus is on improving performance and features for relaying https requests to an upstream proxy.  
 - simplify, document, and better moduarlize the proxy subsystems
-When possible, we will manually integrate patches from ```node-http-mitm-proxy``` into this codebase.  (Applying Pull requests isn't possible due to refactoring to Typescript/ES6)
+- When possible, we will manually integrate patches from ```node-http-mitm-proxy``` into this codebase.  (Applying Pull requests isn't possible due to refactoring to Typescript/ES6)
 
 
 # install
@@ -39,6 +39,7 @@ npm install --save chain-proxy
 ```typescript
 import Proxy = require("chain-proxy");
 let proxy = new Proxy();
+//see ```node-htt-mitm-proxy``` example....
 ```
 
 # usage
@@ -54,4 +55,4 @@ MIT
 # credits
 
 - code written by JasonS <aat> novaleaf <doot coom>
-- original idea from Joe Ferner.  see https://github.com/joeferner/node-http-mitm-proxy
+- original module from Joe Ferner.  see https://github.com/joeferner/node-http-mitm-proxy
