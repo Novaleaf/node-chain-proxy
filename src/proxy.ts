@@ -774,10 +774,16 @@ export class Proxy<TTags> extends ProxyBase<TTags> {
 				ptosHeaders[key] = ctopHeaders[key];
 			}
 		}
+
+		
 		ctx.proxyToServerWebSocketOptions = {
 			url: url,
 			agent: ctx.isSSL ? self.httpsAgent : self.httpAgent,
-			headers: ptosHeaders
+			headers: ptosHeaders,
+
+			//bugfix not fully configured websocket options.   see https://github.com/joeferner/node-http-mitm-proxy/issues/120
+			protocol: ctx.clientToProxyWebSocket.protocol,
+			protocolVersion: ctx.clientToProxyWebSocket.protocolVersion,
 		};
 		return self._onWebSocketConnection(ctx, function (err) {
 			if (err) {
