@@ -1,11 +1,11 @@
 {
   "name": "chain-proxy",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Hard port of http-mitm-proxy to Typescript (+ bugfixes, +features)",
   "author": "Jason Swearingen <jasons@novaleaf.com>",
   "contributors": [
     "Joe Ferner <joe@fernsroth.com>",
-    "Félicien François <felicien@tweakstyle.com>",
+    "Fï¿½licien Franï¿½ois <felicien@tweakstyle.com>",
     "Simon Pratt <simon@pr4tt.com>"
   ],
   "dependencies": {
