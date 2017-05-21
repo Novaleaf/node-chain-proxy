@@ -14,10 +14,11 @@ We used ```node-http-mitm-proxy``` but issue support + bugfixes is slow.  That c
 - customize the CA via ```listenOptions.sslCaName``` (only used when CA cert doesn't exist, IE at first run).  Example:  ```proxy.listen({ port, keepAlive: true, forceSNI: true, timeout: 60000, sslCaName:"My Special Proxy" });```
 
 # ToDo
+- simplify the legacy es3 workflows ported from ```http-mitm-proxy``` *(take advantage of typescript, es6, and promises)*  **[currently in progress]**
 - add onAuth callback to Proxy object (auth ignored if not set)
 - allow api to be used with Promises (currently callback only)
 - remove usage of async library in favor of Bluebird (Promises)
-- Forward HTTPS requests to upstream proxy without expensive MITM layer.  (**help requested!**)
+- Forward HTTPS requests to upstream proxy without expensive MITM layer.  **[help requested!]**
 - Continued feature parity with https://www.npmjs.com/package/http-mitm-proxy : *bugfixes / feature ports as added to the  code or issue tracker*
 - get inspiration from https://github.com/alibaba/anyproxy
 
