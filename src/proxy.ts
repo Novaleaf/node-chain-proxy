@@ -45,18 +45,23 @@ export interface ICertificateMissingHint {
 
 /**
  *  encapsulates logic implementing a Promise based Event subscription system.
+ * 
  */
 export class EventDispatcher<TSender, TArgs, TResult>  {
-	constructor() { };
 
-	public _storage: ((sender:TSender, args: TArgs) => Promise<TResult>)[] = [];
+	public _storage: ((sender: TSender, args: TArgs) => Promise<TResult>)[] = [];
 	public subscribe(callback: ((sender: TSender, args: TArgs) => Promise<TResult>)) {
 		this._storage.push(callback);
 	}
-	public unsubscribe(callback: ((sender: TSender, args: TArgs) => Promise<TResult>)):boolean {
-		return xlib.arrayHelper.removeFirst(this._storage,callback);
+	public unsubscribe(callback: ((sender: TSender, args: TArgs) => Promise<TResult>)): boolean {
+		return xlib.arrayHelper.removeFirst(this._storage, callback);
 	}
 
+	/**
+	 *  dispatch will not be completed until all subscriber functions resolve.
+	 * @param sender
+	 * @param args
+	 */
 	public invoke(sender: TSender, args: TArgs): Promise<TResult[]> {
 		let results: Promise<TResult>[] = [];
 		this._storage.forEach((callback) => {
@@ -68,7 +73,32 @@ export class EventDispatcher<TSender, TArgs, TResult>  {
 		return toReturn;
 	}
 }
+export class ActionDispatcher<TSender, TArgs>  {
 
+	public _storage: ((sender: TSender, args: TArgs) => void)[] = [];
+	public subscribe(callback: ((sender: TSender, args: TArgs) => void)) {
+		this._storage.push(callback);
+	}
+	public unsubscribe(callback: ((sender: TSender, args: TArgs) => void)): boolean {
+		return xlib.arrayHelper.removeFirst(this._storage, callback);
+	}
+	/**
+	 * invokes all subscribed actions, in a LIFO fashion (last attached gets executed first)
+	 * @param sender
+	 * @param args
+	 */
+	public invoke(sender: TSender, args: TArgs): void {
+		_.forEachRight(this._storage, (callback) => {
+			callback(sender, args);
+		});
+	}
+}
+
+export class Mod {
+
+	public onError = new ActionDispatcher<Proxy | ProxyFinalRequestFilter | ProxyFinalResponseFilter, { ctx?: IContext; err?: Error; errorKind?: string, data?:any }>();
+
+}
 
 /** configuration options you pass to the .listen() method*/
 export interface IProxyListenOptions {
@@ -97,49 +127,51 @@ export interface IProxyListenOptions {
 	sslCaName?: string;
 }
 
-export abstract class ProxyBase<TTags> {
+export abstract class ProxyBase {
 
 	///////////  move from Proxy
 
 
 	////////////////  end
 
-	public onErrorHandlers: ((context: IContext<TTags>, err?: Error, errorKind?: string) => void)[] = [];
 
-	public onWebSocketConnectionHandlers: ((ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void)[] = [];
+	//	public onErrorHandlers: ((context: IContext, err?: Error, errorKind?: string) => void)[] = [];
+	//	public onError(/**Adds a function to the list of functions to get called if an error occures.
+
+	//Arguments
+
+	//fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (context: IContext, err?: Error, errorKind?: string) => void) {
+	//		this.onErrorHandlers.push(fn);
+	//		return this;
+	//	};
+
+	public onWebSocketConnectionHandlers: ((ctx: IContext, callback: (error: Error | undefined) => void) => void)[] = [];
 	/** shared storage for .onWebSocketSend() and .onWebSocketMessage() and .onWebSocketFrame() */
-	public onWebSocketFrameHandlers: ((ctx: IContext<TTags>, type: any, fromServer: boolean, message: any, flags: any, callback: (err: Error | undefined, message: any, flags: any) => void) => void)[] = [];
+	public onWebSocketFrameHandlers: ((ctx: IContext, type: any, fromServer: boolean, message: any, flags: any, callback: (err: Error | undefined, message: any, flags: any) => void) => void)[] = [];
 
-	public onWebSocketCloseHandlers: ((ctx: IContext<TTags>, code: any, message: any, callback: (err: Error | undefined, code: any, message: any) => void) => void)[] = [];
-	public onWebSocketErrorHandlers: ((ctx: IContext<TTags>, err: Error | undefined) => void)[] = [];
+	public onWebSocketCloseHandlers: ((ctx: IContext, code: any, message: any, callback: (err: Error | undefined, code: any, message: any) => void) => void)[] = [];
+	public onWebSocketErrorHandlers: ((ctx: IContext, err: Error | undefined) => void)[] = [];
 
-	public onRequestHandlers: ((ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void)[] = [];
-	public onRequestHeadersHandlers: ((ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void)[] = [];
+	public onRequestHandlers: ((ctx: IContext, callback: (error: Error | undefined) => void) => void)[] = [];
+	public onRequestHeadersHandlers: ((ctx: IContext, callback: (error: Error | undefined) => void) => void)[] = [];
 
-	public onRequestDataHandlers: ((ctx: IContext<TTags>, chunk: Buffer, callback: (error?: Error, chunk?: Buffer) => void) => void)[] = [];
-	public onRequestEndHandlers: ((ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void)[] = [];
-	public onResponseHandlers: ((ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void)[] = [];
-	public onResponseHeadersHandlers: ((ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void)[] = [];
-	public onResponseDataHandlers: ((ctx: IContext<TTags>, chunk: Buffer, callback: (error?: Error, chunk?: Buffer) => void) => void)[] = [];
-	public onResponseEndHandlers: ((ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void)[] = [];
-
-	public onError(/**Adds a function to the list of functions to get called if an error occures.
-
-Arguments
-
-fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (context: IContext<TTags>, err?: Error, errorKind?: string) => void) {
-		this.onErrorHandlers.push(fn);
-		return this;
-	};
+	public onRequestDataHandlers: ((ctx: IContext, chunk: Buffer, callback: (error?: Error, chunk?: Buffer) => void) => void)[] = [];
+	public onRequestEndHandlers: ((ctx: IContext, callback: (error: Error | undefined) => void) => void)[] = [];
+	public onResponseHandlers: ((ctx: IContext, callback: (error: Error | undefined) => void) => void)[] = [];
+	public onResponseHeadersHandlers: ((ctx: IContext, callback: (error: Error | undefined) => void) => void)[] = [];
+	public onResponseDataHandlers: ((ctx: IContext, chunk: Buffer, callback: (error?: Error, chunk?: Buffer) => void) => void)[] = [];
+	public onResponseEndHandlers: ((ctx: IContext, callback: (error: Error | undefined) => void) => void)[] = [];
 
 
 
-	public onWebSocketConnection(fn: (ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void) {
+
+
+	public onWebSocketConnection(fn: (ctx: IContext, callback: (error: Error | undefined) => void) => void) {
 		this.onWebSocketConnectionHandlers.push(fn);
 		return this;
 	};
 
-	public onWebSocketSend(fn: (ctx: IContext<TTags>, message: any, flags: any, callback: (err: Error | undefined, message: any, flags: any) => void) => void) {
+	public onWebSocketSend(fn: (ctx: IContext, message: any, flags: any, callback: (err: Error | undefined, message: any, flags: any) => void) => void) {
 		this.onWebSocketFrameHandlers.push(function (ctx, type, fromServer, data, flags, callback) {
 			if (!fromServer && type === 'message') return this(ctx, data, flags, callback);
 			else callback(null, data, flags);
@@ -147,7 +179,7 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (context: 
 		return this;
 	};
 
-	public onWebSocketMessage(fn: (ctx: IContext<TTags>, message: any, flags: any, callback: (err: Error | undefined, message: any, flags: any) => void) => void) {
+	public onWebSocketMessage(fn: (ctx: IContext, message: any, flags: any, callback: (err: Error | undefined, message: any, flags: any) => void) => void) {
 		this.onWebSocketFrameHandlers.push(function (ctx, type, fromServer, data, flags, callback) {
 			if (fromServer && type === 'message') return this(ctx, data, flags, callback);
 			else callback(null, data, flags);
@@ -155,17 +187,17 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (context: 
 		return this;
 	};
 
-	public onWebSocketFrame(fn: (ctx: IContext<TTags>, type: any, fromServer: boolean, message: any, flags: any, callback: (err: Error | undefined, message: any, flags: any) => void) => void) {
+	public onWebSocketFrame(fn: (ctx: IContext, type: any, fromServer: boolean, message: any, flags: any, callback: (err: Error | undefined, message: any, flags: any) => void) => void) {
 		this.onWebSocketFrameHandlers.push(fn);
 		return this;
 	};
 
-	public onWebSocketClose(fn: (ctx: IContext<TTags>, code: any, message: any, callback: (err: Error | undefined, code: any, message: any) => void) => void) {
+	public onWebSocketClose(fn: (ctx: IContext, code: any, message: any, callback: (err: Error | undefined, code: any, message: any) => void) => void) {
 		this.onWebSocketCloseHandlers.push(fn);
 		return this;
 	};
 
-	public onWebSocketError(fn: (ctx: IContext<TTags>, err: Error | undefined) => void) {
+	public onWebSocketError(fn: (ctx: IContext, err: Error | undefined) => void) {
 		this.onWebSocketErrorHandlers.push(fn);
 		return this;
 	};
@@ -181,22 +213,22 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (context: 
 			 console.log('REQUEST:', ctx.clientToProxyRequest.url);
 			 return callback();
 		   }); */
-	public onRequest(fn: (ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void) {
+	public onRequest(fn: (ctx: IContext, callback: (error: Error | undefined) => void) => void) {
 		this.onRequestHandlers.push(fn);
 		return this;
 	};
 
-	public onRequestHeaders(fn: (ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void) {
+	public onRequestHeaders(fn: (ctx: IContext, callback: (error: Error | undefined) => void) => void) {
 		this.onRequestHeadersHandlers.push(fn);
 		return this;
 	};
 
-	public onRequestData(fn: (ctx: IContext<TTags>, chunk: Buffer, callback: (error?: Error, chunk?: Buffer) => void) => void) {
+	public onRequestData(fn: (ctx: IContext, chunk: Buffer, callback: (error?: Error, chunk?: Buffer) => void) => void) {
 		this.onRequestDataHandlers.push(fn);
 		return this;
 	};
 
-	public onRequestEnd(fn: (ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void) {
+	public onRequestEnd(fn: (ctx: IContext, callback: (error: Error | undefined) => void) => void) {
 		this.onRequestEndHandlers.push(fn);
 		return this;
 	};
@@ -212,55 +244,55 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (context: 
 	  console.log('BEGIN RESPONSE');
 	  return callback();
 	}); */
-	public onResponse(fn: (ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void) {
+	public onResponse(fn: (ctx: IContext, callback: (error: Error | undefined) => void) => void) {
 		this.onResponseHandlers.push(fn);
 		return this;
 	};
 
-	public onResponseHeaders(fn: (ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void) {
+	public onResponseHeaders(fn: (ctx: IContext, callback: (error: Error | undefined) => void) => void) {
 		this.onResponseHeadersHandlers.push(fn);
 		return this;
 	};
 
-	public onResponseData(fn: (ctx: IContext<TTags>, chunk: Buffer, callback: (error?: Error, chunk?: Buffer) => void) => void) {
+	public onResponseData(fn: (ctx: IContext, chunk: Buffer, callback: (error?: Error, chunk?: Buffer) => void) => void) {
 		this.onResponseDataHandlers.push(fn);
 		return this;
 	};
 
-	public onResponseEnd(fn: (ctx: IContext<TTags>, callback: (error: Error | undefined) => void) => void) {
+	public onResponseEnd(fn: (ctx: IContext, callback: (error: Error | undefined) => void) => void) {
 		this.onResponseEndHandlers.push(fn);
 		return this;
 	};
 
 
 
-	public _onError(kind, ctx, err) {
-		log.assert(this === ctx, "assume same object");
-		ctx.onErrorHandlers.forEach(function (handler) {
-			return handler(ctx, err, kind);
-		});
-		if (ctx.proxyToClientResponse && !ctx.proxyToClientResponse.headersSent) {
-			ctx.proxyToClientResponse.writeHead(504, 'Proxy Error  (ctx._onError() invoked)');
-		}
-		if (ctx.proxyToClientResponse && !ctx.proxyToClientResponse.finished) {
-			ctx.proxyToClientResponse.end('' + kind + ': ' + err, 'utf8');
-		}
+	//public _onError(kind, ctx, err) {
+	//	log.assert(this === ctx, "assume same object");
+	//	ctx.onErrorHandlers.forEach(function (handler) {
+	//		return handler(ctx, err, kind);
+	//	});
+	//	if (ctx.proxyToClientResponse && !ctx.proxyToClientResponse.headersSent) {
+	//		ctx.proxyToClientResponse.writeHead(504, 'Proxy Error  (ctx._onError() invoked)');
+	//	}
+	//	if (ctx.proxyToClientResponse && !ctx.proxyToClientResponse.finished) {
+	//		ctx.proxyToClientResponse.end('' + kind + ': ' + err, 'utf8');
+	//	}
 
-		//this.onErrorHandlers.forEach(function (handler) {
-		//	return handler(ctx, err, kind);
-		//});
-		//if (ctx) {
-		//	ctx.onErrorHandlers.forEach(function (handler) {
-		//		return handler(ctx, err, kind);
-		//	});
-		//	if (ctx.proxyToClientResponse && !ctx.proxyToClientResponse.headersSent) {
-		//		ctx.proxyToClientResponse.writeHead(504, 'Proxy Error');
-		//	}
-		//	if (ctx.proxyToClientResponse && !ctx.proxyToClientResponse.finished) {
-		//		ctx.proxyToClientResponse.end('' + kind + ': ' + err, 'utf8');
-		//	}
-		//}
-	};
+	//	//this.onErrorHandlers.forEach(function (handler) {
+	//	//	return handler(ctx, err, kind);
+	//	//});
+	//	//if (ctx) {
+	//	//	ctx.onErrorHandlers.forEach(function (handler) {
+	//	//		return handler(ctx, err, kind);
+	//	//	});
+	//	//	if (ctx.proxyToClientResponse && !ctx.proxyToClientResponse.headersSent) {
+	//	//		ctx.proxyToClientResponse.writeHead(504, 'Proxy Error');
+	//	//	}
+	//	//	if (ctx.proxyToClientResponse && !ctx.proxyToClientResponse.finished) {
+	//	//		ctx.proxyToClientResponse.end('' + kind + ': ' + err, 'utf8');
+	//	//	}
+	//	//}
+	//};
 
 
 	/** Adds a module into the proxy. Modules encapsulate multiple life cycle processing functions into one object.
@@ -289,9 +321,9 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (context: 
 			  Proxy.gunzip Gunzip response filter (uncompress gzipped content before onResponseData and compress back after)
 			  Proxy.wildcard Generates wilcard certificates by default (so less certificates are generated) */
 	public use(mod) {
-		if (mod.onError) {
-			this.onError(mod.onError);
-		}
+		//if (mod.onError) {
+		//	this.onError(mod.onError);
+		//}
 
 		if (mod.onRequest) {
 			this.onRequest(mod.onRequest);
@@ -340,11 +372,11 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (context: 
 }
 
 
-export abstract class ContextCallbacks<TTags> extends ProxyBase<TTags>{
+export abstract class ContextCallbacks extends ProxyBase {
 
 
 	/** Jason Port notes: belongs on Proxy.  internally enumerates ctx handlers */
-	public _onRequest(ctx: IContext<TTags>, callback) {
+	public _onRequest(ctx: IContext, callback) {
 		log.assert(this === ctx as any, "assume same obj");
 
 
@@ -543,7 +575,7 @@ export abstract class ContextCallbacks<TTags> extends ProxyBase<TTags>{
 
 
 
-export class IContext<TTags> extends ContextCallbacks<TTags> {
+export class IContext extends ContextCallbacks {
 	/** options sent to WebSocket when connecting.   set by Proxy._onWebSocketServerConnect() (internal code, when a websocket connects) and you can override via proxy.onWebSocketConnection().
 	undefined and unused if not a websocket connection */
 	public proxyToServerWebSocketOptions: { url: string } & WebSocket.IClientOptions;// { url: string, agent: http.Agent | https.Agent, headers: { [key: string]: string } };
@@ -583,7 +615,7 @@ export class IContext<TTags> extends ContextCallbacks<TTags> {
 
 	/** user defined tags, initially constructed in the proxy-internals.tx proxy.onRequest() callback, you can add what you like here. 
 	 by default, will be undefined.  you can set it in your proxy.onRequest() callback*/
-	tags: TTags
+	tags: any
 
 	/** set when constructing the context (prior to proxy.onRequest() being called)  */
 	public url: urlModule.Url;
@@ -622,30 +654,72 @@ export class IContext<TTags> extends ContextCallbacks<TTags> {
 }
 
 ///////////////////////////  END ICONTEXT CLASS
-export class Proxy<TTags> {
+export class Proxy {
 
 	/** triggered when the context is created, before any other context specific events are triggered. 
 	check ctx.url.protocol to decide what events to bind.  http, https, or ws */
-	public onContextInitialize = new EventDispatcher<Proxy<TTags>,{
-		ctx: IContext<TTags>; //protocol: "http" | "https" | "ws";
+	public onContextInitialize = new EventDispatcher<Proxy, {
+		ctx: IContext; //protocol: "http" | "https" | "ws";
 	}, void>();
 
-	protected onErrorHandlers: ((err?: Error, errorKind?: string) => void)[] = [];
-	public onError(/**Adds a function to the list of functions to get called if an error occures.
+	//	protected onErrorHandlers: ((err?: Error, errorKind?: string) => void)[] = [];
+	//	public onError(/**Adds a function to the list of functions to get called if an error occures.
 
-Arguments
+	//Arguments
 
-fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Error, errorKind?: string) => void) {
-		this.onErrorHandlers.push(fn);
-		return this;
-	};
-	public _onError(kind: string, err: Error) {
-		this.onErrorHandlers.forEach(function (handler) {
-			return handler(err, kind);
+	//fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Error, errorKind?: string) => void) {
+	//		this.onErrorHandlers.push(fn);
+	//		return this;
+	//	};
+	//	public _onError(kind: string, err: Error) {
+	//		this.onErrorHandlers.forEach(function (handler) {
+	//			return handler(err, kind);
+	//		});
+	//	};
+
+
+	public _masterModDispatcher = new Mod();
+	private _attachedMods: Mod[] = [];
+
+	public attachMod(mod: Mod) {
+
+		//attach all callbacks from mod to our masterDispatcher
+		_.forOwn(mod, (dispatcher, key) => {
+			_.forEach(dispatcher._storage, (callback) => {
+				log.info(`attaching mod.${key} to proxy._masterModDispatcher`);
+				this._masterModDispatcher[key].subscribe(callback)
+			});
 		});
-	};
+		this._attachedMods.push(mod);
+	}
 
-	public use(mod) {
+	constructor(overrideDefaultMod?: Mod) {
+		if (overrideDefaultMod == null) {
+			//add our default callbacks.
+			overrideDefaultMod = new Mod();
+			overrideDefaultMod.onError.subscribe((sender, args) => {
+				log.error("defaultMod.onError() triggered.  If ctx exists, will close with 504 error.", { sender, args });
+				if (args.ctx) {
+					if (args.ctx.proxyToClientResponse && !args.ctx.proxyToClientResponse.headersSent) {
+						args.ctx.proxyToClientResponse.writeHead(504, 'Proxy Error');
+					} else {
+						log.warn("last defaultMod.onError() triggered after already ctx headers sent", { sender, args });
+					}
+					if (args.ctx.proxyToClientResponse && !args.ctx.proxyToClientResponse.finished) {
+						args.ctx.proxyToClientResponse.end('' + args.errorKind + ': ' + args.err, 'utf8');
+					} else {
+						log.warn("last defaultMod.onError() triggered after already ctx is finished", { sender, args });
+					}
+				}
+			});
+		}
+
+		this.attachMod(overrideDefaultMod);
+	}
+	public use(mod: any) {
+
+
+
 		if (mod.onCertificateRequired) {
 			this.onCertificateRequired = mod.onCertificateRequired;
 		}
@@ -719,7 +793,9 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 			self.sslSemaphores = {};
 			self.httpServer = http.createServer();
 			self.httpServer.timeout = self.timeout;
-			self.httpServer.on('error', self._onError.bind(self, 'HTTP_SERVER_ERROR'));
+			//self.httpServer.on('error', self._onError.bind(self, 'HTTP_SERVER_ERROR'));
+			self.httpServer.on("error", (err) => { self._masterModDispatcher.onError.invoke(self, { err, errorKind: "proxy.httpServer.on('error')" }); });
+
 			self.httpServer.on('connect', self._onHttpServerConnect.bind(self));
 			self.httpServer.on('request', self._onHttpServerRequest.bind(self, false));
 			self.wsServer = new WebSocket.Server({ server: self.httpServer });
@@ -745,8 +821,10 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 	private _createHttpsServer(options, callback) {
 		var httpsServer = https.createServer(options);
 		(httpsServer as any).timeout = this.timeout; //exists: https://nodejs.org/api/https.html
-		httpsServer.on('error', this._onError.bind(this, 'HTTPS_SERVER_ERROR'));
-		httpsServer.on('clientError', this._onError.bind(this, 'HTTPS_CLIENT_ERROR'));
+		//httpsServer.on('error', this._onError.bind(this, 'HTTPS_SERVER_ERROR'));
+		httpsServer.on("error", (err) => { this._masterModDispatcher.onError.invoke(this, { err, errorKind: "proxy.httpsServer.on('error')" }); });
+		//httpsServer.on('clientError', this._onError.bind(this, 'HTTPS_CLIENT_ERROR'));
+		httpsServer.on("error", (err) => { this._masterModDispatcher.onError.invoke(this, { err, errorKind: "proxy.httpsServer.on('clientError')" }); });
 		httpsServer.on('connect', this._onHttpServerConnect.bind(this));
 		httpsServer.on('request', this._onHttpServerRequest.bind(this, true));
 		var wssServer = new WebSocket.Server({ server: httpsServer });
@@ -809,7 +887,8 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 			return fn.call(self, req, socket, head, callback)
 		}, function (err: Error) {
 			if (err) {
-				return self._onError('ON_CONNECT_ERROR', err);
+				//return self._onError('ON_CONNECT_ERROR', err);
+				return self._masterModDispatcher.onError.invoke(self, { err, errorKind: "proxy._masterModDispatcher.onConnect() --> error", data: {req,socket,head} });
 			}
 			// we need first byte of data to detect if request is SSL encrypted
 			if (!head || head.length === 0) {
@@ -872,7 +951,8 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 				getHttpsServer(hostname, function (err: Error, port) {
 					process.nextTick(sem.leave.bind(sem));
 					if (err) {
-						return self._onError('OPEN_HTTPS_SERVER_ERROR', err);
+						//return self._onError('OPEN_HTTPS_SERVER_ERROR', err);
+						return self._masterModDispatcher.onError.invoke(self, { err, errorKind: "OPEN_HTTPS_SERVER_ERROR", data: { req, socket, head } });
 					}
 					return makeConnection(port);
 				});
@@ -890,7 +970,9 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 				socket.emit('data', head);
 				return socket.resume();
 			});
-			conn.on('error', self._onError.bind(self, 'PROXY_TO_PROXY_SOCKET_ERROR'));
+			//conn.on('error', self._onError.bind(self, 'PROXY_TO_PROXY_SOCKET_ERROR'));
+			conn.on("error", (err) => { self._masterModDispatcher.onError.invoke(self, { err, errorKind: "PROXY_TO_PROXY_SOCKET_ERROR", data: { port } }); });
+		
 		}
 
 		function getHttpsServer(hostname, callback) {
@@ -1026,7 +1108,7 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 	private _onWebSocketServerConnect(isSSL, ws) {
 		var self = this;
 
-		var ctx = new IContext<TTags>();
+		var ctx = new IContext();
 		ctx.isSSL = isSSL;
 		ctx.clientToProxyWebSocket = ws;
 
@@ -1063,7 +1145,7 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 			protocolVersion: ctx.clientToProxyWebSocket.protocolVersion,
 		};
 
-		//apply mods
+		////apply mods
 		this.mods.forEach((mod) => {
 			ctx.use(mod);
 		});
@@ -1104,7 +1186,7 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 		var self = this;
 
 
-		var ctx = new IContext<TTags>();
+		var ctx = new IContext();
 		ctx.isSSL = isSSL;
 		ctx.clientToProxyRequest = clientToProxyRequest;
 		ctx.proxyToClientResponse = proxyToClientResponse;
@@ -1119,7 +1201,7 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 
 		ctx.clientToProxyRequest.pause();
 
-		//apply mods
+		////apply mods
 		this.mods.forEach((mod) => {
 			ctx.use(mod);
 		});
@@ -1127,8 +1209,10 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 		return this.onContextInitialize.invoke(this, { ctx })
 			.then(() => {
 
-				ctx.clientToProxyRequest.on('error', ctx._onError.bind(ctx, 'CLIENT_TO_PROXY_REQUEST_ERROR', ctx));
-				ctx.proxyToClientResponse.on('error', ctx._onError.bind(ctx, 'PROXY_TO_CLIENT_RESPONSE_ERROR', ctx));
+				//ctx.clientToProxyRequest.on('error', ctx._onError.bind(ctx, 'CLIENT_TO_PROXY_REQUEST_ERROR', ctx));
+				ctx.clientToProxyRequest.on("error", (err) => { self._masterModDispatcher.onError.invoke(self, { err, errorKind: "CLIENT_TO_PROXY_REQUEST_ERROR", ctx }); });
+				//ctx.proxyToClientResponse.on('error', ctx._onError.bind(ctx, 'PROXY_TO_CLIENT_RESPONSE_ERROR', ctx));
+				ctx.proxyToClientResponse.on("error", (err) => { self._masterModDispatcher.onError.invoke(self, { err, errorKind: "PROXY_TO_CLIENT_RESPONSE_ERROR", ctx }); });
 
 
 				var hostPort = utils.parseHostAndPort(ctx.clientToProxyRequest, ctx.isSSL ? 443 : 80);
@@ -1163,11 +1247,14 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 				function callOnRequestHandlersThenMakeProxyRequest() {
 					return ctx._onRequest(ctx, function (err) {
 						if (err) {
-							return ctx._onError('ON_REQUEST_ERROR', ctx, err);
+							//return ctx._onError('ON_REQUEST_ERROR', ctx, err);
+							return self._masterModDispatcher.onError.invoke(self, { err, errorKind: "ON_REQUEST_ERROR", ctx, });
 						}
 						return ctx._onRequestHeaders(ctx, function (err) {
 							if (err) {
-								return ctx._onError('ON_REQUESTHEADERS_ERROR', ctx, err);
+								//return ctx._onError('ON_REQUESTHEADERS_ERROR', ctx, err);
+								
+								return self._masterModDispatcher.onError.invoke(self, { err, errorKind: "ON_REQUESTHEADERS_ERROR", ctx, });
 							}
 							return makeProxyToServerRequest();
 						});
@@ -1182,7 +1269,8 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 					if (ctx.tags.retryProxyRequest === true) {
 						return callOnRequestHandlersThenMakeProxyRequest();
 					} else {
-						ctx._onError('PROXY_TO_SERVER_REQUEST_ERROR', ctx, err);
+						//ctx._onError('PROXY_TO_SERVER_REQUEST_ERROR', ctx, err);						
+						return self._masterModDispatcher.onError.invoke(self, { err, errorKind: "PROXY_TO_SERVER_REQUEST_ERROR", ctx, });
 					}
 				}
 
@@ -1197,7 +1285,8 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 					var proxyFinalRequestFilter = new ProxyFinalRequestFilter(self, ctx);
 					var prevRequestPipeElem = ctx.clientToProxyRequest;
 					ctx.requestFilters.forEach(function (filter) {
-						filter.on('error', ctx._onError.bind(ctx, 'REQUEST_FILTER_ERROR', ctx));
+						//filter.on('error', ctx._onError.bind(ctx, 'REQUEST_FILTER_ERROR', ctx));
+						filter.on("error", (err) => { self._masterModDispatcher.onError.invoke(self, { err, errorKind: "REQUEST_FILTER_ERROR", ctx }); });
 						try {
 							prevRequestPipeElem = prevRequestPipeElem.pipe(filter);
 						} catch (ex) {
@@ -1242,12 +1331,15 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 
 
 				function proxyToServerRequestComplete(serverToProxyResponse) {
-					serverToProxyResponse.on('error', ctx._onError.bind(ctx, 'SERVER_TO_PROXY_RESPONSE_ERROR', ctx));
+					//serverToProxyResponse.on('error', ctx._onError.bind(ctx, 'SERVER_TO_PROXY_RESPONSE_ERROR', ctx));
+					serverToProxyResponse.on("error", (err) => { self._masterModDispatcher.onError.invoke(self, { err, errorKind: "SERVER_TO_PROXY_RESPONSE_ERROR", ctx }); });
+
 					serverToProxyResponse.pause();
 					ctx.serverToProxyResponse = serverToProxyResponse;
 					return ctx._onResponse(ctx, function (err) {
 						if (err) {
-							return ctx._onError('ON_RESPONSE_ERROR', ctx, err);
+							//return ctx._onError('ON_RESPONSE_ERROR', ctx, err);
+							return self._masterModDispatcher.onError.invoke(self, { err, errorKind: "ON_RESPONSE_ERROR", ctx, });
 						}
 						ctx.serverToProxyResponse.headers['transfer-encoding'] = 'chunked';
 						delete ctx.serverToProxyResponse.headers['content-length'];
@@ -1261,13 +1353,15 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 						}
 						return ctx._onResponseHeaders(ctx, function (err) {
 							if (err) {
-								return ctx._onError('ON_RESPONSEHEADERS_ERROR', ctx, err);
+								//return ctx._onError('ON_RESPONSEHEADERS_ERROR', ctx, err);
+								return self._masterModDispatcher.onError.invoke(self, { err, errorKind: "ON_RESPONSEHEADERS_ERROR", ctx, });
 							}
 							ctx.proxyToClientResponse.writeHead(ctx.serverToProxyResponse.statusCode, utils.filterAndCanonizeHeaders(ctx.serverToProxyResponse.headers));
 							ctx.responseFilters.push(new ProxyFinalResponseFilter(self, ctx));
 							var prevResponsePipeElem = ctx.serverToProxyResponse;
 							ctx.responseFilters.forEach(function (filter) {
-								filter.on('error', ctx._onError.bind(ctx, 'RESPONSE_FILTER_ERROR', ctx));
+								//filter.on('error', ctx._onError.bind(ctx, 'RESPONSE_FILTER_ERROR', ctx));
+								filter.on("error", (err) => { self._masterModDispatcher.onError.invoke(self, { err, errorKind: "RESPONSE_FILTER_ERROR", ctx }); });
 								prevResponsePipeElem = prevResponsePipeElem.pipe(filter);
 							});
 							return ctx.serverToProxyResponse.resume();
@@ -1279,7 +1373,7 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 	}
 
 	///** Jason Port notes: belongs on Proxy.  internally enumerates ctx handlers */
-	//public _onRequest(ctx: IContext<TTags>, callback) {
+	//public _onRequest(ctx: IContext, callback) {
 	//	//log.assert(this === ctx as any, "assume same obj");
 	//	//async.forEach(ctx.onRequestHandlers, function (fn, callback) {
 	//	//	return fn(ctx, callback);
@@ -1510,10 +1604,10 @@ fn(ctx, err, errorKind) - The function to be called on an error.*/fn: (err?: Err
 // };
 // util.inherits(ProxyFinalRequestFilter, events.EventEmitter);
 
-class ProxyFinalRequestFilter<TTags> extends events.EventEmitter {
+class ProxyFinalRequestFilter extends events.EventEmitter {
 	public writable: boolean;
 
-	constructor(public proxy: Proxy<TTags>, public ctx: IContext<TTags>) {
+	constructor(public proxy: Proxy, public ctx: IContext) {
 		super();
 		events.EventEmitter.call(this);
 		this.writable = true;
@@ -1522,7 +1616,8 @@ class ProxyFinalRequestFilter<TTags> extends events.EventEmitter {
 		const self = this;
 		self.ctx._onRequestData(self.ctx, chunk, function (err, chunk) {
 			if (err) {
-				return self.ctx._onError('ON_REQUEST_DATA_ERROR', self.ctx, err);
+				//return self.ctx._onError('ON_REQUEST_DATA_ERROR', self.ctx, err);
+				return self.proxy._masterModDispatcher.onError.invoke(self, { err, errorKind: "ON_REQUEST_DATA_ERROR", ctx:self.ctx, });
 			}
 			if (chunk) {
 				return self.ctx.proxyToServerRequest.write(chunk);
@@ -1537,12 +1632,14 @@ class ProxyFinalRequestFilter<TTags> extends events.EventEmitter {
 		if (chunk) {
 			return self.ctx._onRequestData(self.ctx, chunk, function (err, chunk) {
 				if (err) {
-					return self.ctx._onError('ON_REQUEST_DATA_ERROR', self.ctx, err);
+					//return self.ctx._onError('ON_REQUEST_DATA_ERROR', self.ctx, err);
+					return self.proxy._masterModDispatcher.onError.invoke(self, { err, errorKind: "ON_REQUEST_DATA_ERROR", ctx: self.ctx, });					
 				}
 
 				return self.ctx._onRequestEnd(self.ctx, function (err) {
 					if (err) {
-						return self.ctx._onError('ON_REQUEST_END_ERROR', self.ctx, err);
+						//return self.ctx._onError('ON_REQUEST_END_ERROR', self.ctx, err);
+						return self.proxy._masterModDispatcher.onError.invoke(self, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: self.ctx, });
 					}
 					return self.ctx.proxyToServerRequest.end(chunk);
 				});
@@ -1550,7 +1647,8 @@ class ProxyFinalRequestFilter<TTags> extends events.EventEmitter {
 		} else {
 			return self.ctx._onRequestEnd(self.ctx, function (err) {
 				if (err) {
-					return self.ctx._onError('ON_REQUEST_END_ERROR', self.ctx, err);
+					//return self.ctx._onError('ON_REQUEST_END_ERROR', self.ctx, err);
+					return self.proxy._masterModDispatcher.onError.invoke(self, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: self.ctx, });
 				}
 				return self.ctx.proxyToServerRequest.end(chunk || undefined);
 			});
@@ -1558,11 +1656,11 @@ class ProxyFinalRequestFilter<TTags> extends events.EventEmitter {
 	};
 }
 
-class ProxyFinalResponseFilter<TTags> extends events.EventEmitter {
+class ProxyFinalResponseFilter extends events.EventEmitter {
 
 	public writable: boolean;
 
-	constructor(public proxy: Proxy<TTags>, public ctx: IContext<TTags>) {
+	constructor(public proxy: Proxy, public ctx: IContext) {
 		super();
 		events.EventEmitter.call(this);
 		this.writable = true;
@@ -1571,7 +1669,8 @@ class ProxyFinalResponseFilter<TTags> extends events.EventEmitter {
 		const self = this;
 		self.ctx._onResponseData(self.ctx, chunk, function (err, chunk) {
 			if (err) {
-				return self.ctx._onError('ON_RESPONSE_DATA_ERROR', self.ctx, err);
+				//return self.ctx._onError('ON_RESPONSE_DATA_ERROR', self.ctx, err);
+				return self.proxy._masterModDispatcher.onError.invoke(self, { err, errorKind: "ON_RESPONSE_DATA_ERROR", ctx: self.ctx, });				
 			}
 			if (chunk) {
 				return self.ctx.proxyToClientResponse.write(chunk);
@@ -1585,12 +1684,14 @@ class ProxyFinalResponseFilter<TTags> extends events.EventEmitter {
 		if (chunk) {
 			return self.ctx._onResponseData(self.ctx, chunk, function (err, chunk) {
 				if (err) {
-					return self.ctx._onError('ON_RESPONSE_DATA_ERROR', self.ctx, err);
+					//return self.ctx._onError('ON_RESPONSE_DATA_ERROR', self.ctx, err);
+					return self.proxy._masterModDispatcher.onError.invoke(self, { err, errorKind: "ON_RESPONSE_DATA_ERROR", ctx: self.ctx, });
 				}
 
 				return self.ctx._onResponseEnd(self.ctx, function (err) {
 					if (err) {
-						return self.ctx._onError('ON_RESPONSE_END_ERROR', self.ctx, err);
+						//return self.ctx._onError('ON_RESPONSE_END_ERROR', self.ctx, err);
+						return self.proxy._masterModDispatcher.onError.invoke(self, { err, errorKind: "ON_RESPONSE_END_ERROR", ctx: self.ctx, });
 					}
 					return self.ctx.proxyToClientResponse.end(chunk || undefined);
 				});
@@ -1598,7 +1699,8 @@ class ProxyFinalResponseFilter<TTags> extends events.EventEmitter {
 		} else {
 			return self.ctx._onResponseEnd(self.ctx, function (err) {
 				if (err) {
-					return self.ctx._onError('ON_RESPONSE_END_ERROR', self.ctx, err);
+					//return self.ctx._onError('ON_RESPONSE_END_ERROR', self.ctx, err);
+					return self.proxy._masterModDispatcher.onError.invoke(self, { err, errorKind: "ON_RESPONSE_END_ERROR", ctx: self.ctx, });
 				}
 				return self.ctx.proxyToClientResponse.end(chunk || undefined);
 			});
