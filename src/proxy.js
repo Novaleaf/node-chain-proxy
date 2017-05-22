@@ -26,7 +26,7 @@ var events = require("events");
 var WebSocket = require("ws");
 var urlModule = require("url");
 var semaphore = require("semaphore");
-var ca = require("./ca.js");
+var ca = require("./ca");
 var middleware;
 (function (middleware) {
     middleware.gunzip = require('./middleware/gunzip');
@@ -350,8 +350,9 @@ var ContextCallbacks = (function (_super) {
     ;
     /** Jason Port notes: belongs on Proxy.  internally enumerates ctx handlers */
     ContextCallbacks.prototype._onWebSocketFrame = function (ctx, type, fromServer, data, flags) {
+        var _this = this;
         log.assert(this === ctx, "assume same obj");
-        var self = this;
+        //var this = this;
         async.forEach(this.onWebSocketFrameHandlers, function (fn, fnDoneCallback) {
             return fn(ctx, type, fromServer, data, flags, function (err, newData, newFlags) {
                 if (err) {
@@ -363,7 +364,7 @@ var ContextCallbacks = (function (_super) {
             });
         }, function (err) {
             if (err) {
-                return self._onWebSocketError(ctx, err);
+                return _this._onWebSocketError(ctx, err);
             }
             var destWebSocket = fromServer ? ctx.clientToProxyWebSocket : ctx.proxyToServerWebSocket;
             if (destWebSocket.readyState === WebSocket.OPEN) {
@@ -380,15 +381,16 @@ var ContextCallbacks = (function (_super) {
                 }
             }
             else {
-                self._onWebSocketError(ctx, new Error('Cannot send ' + type + ' because ' + (fromServer ? 'clientToProxy' : 'proxyToServer') + ' WebSocket connection state is not OPEN'));
+                _this._onWebSocketError(ctx, new Error('Cannot send ' + type + ' because ' + (fromServer ? 'clientToProxy' : 'proxyToServer') + ' WebSocket connection state is not OPEN'));
             }
         });
     };
     ;
     /** Jason Port notes: belongs on Proxy.  internally enumerates ctx handlers */
     ContextCallbacks.prototype._onWebSocketClose = function (ctx, closedByServer, code, message) {
+        var _this = this;
         log.assert(this === ctx, "assume same obj");
-        var self = this;
+        //var this = this;
         if (!ctx.closedByServer && !ctx.closedByClient) {
             ctx.closedByServer = closedByServer;
             ctx.closedByClient = !closedByServer;
@@ -403,7 +405,7 @@ var ContextCallbacks = (function (_super) {
                 });
             }, function (err) {
                 if (err) {
-                    return self._onWebSocketError(ctx, err);
+                    return _this._onWebSocketError(ctx, err);
                 }
                 if (ctx.clientToProxyWebSocket.readyState !== ctx.proxyToServerWebSocket.readyState) {
                     if (ctx.clientToProxyWebSocket.readyState === WebSocket.CLOSED && ctx.proxyToServerWebSocket.readyState === WebSocket.OPEN) {
@@ -441,7 +443,7 @@ var ContextCallbacks = (function (_super) {
     /** Jason Port notes: belongs on Proxy.  internally enumerates ctx handlers */
     ContextCallbacks.prototype._onRequestData = function (ctx, chunk, callback) {
         log.assert(this === ctx, "assume same obj");
-        var self = this;
+        //var this = this;
         async.forEach(this.onRequestDataHandlers, function (fn, callback) {
             return fn(ctx, chunk, function (err, newChunk) {
                 if (err) {
@@ -461,7 +463,7 @@ var ContextCallbacks = (function (_super) {
     /** Jason Port notes: belongs on Proxy.  internally enumerates ctx handlers */
     ContextCallbacks.prototype._onRequestEnd = function (ctx, callback) {
         log.assert(this === ctx, "assume same obj");
-        var self = this;
+        //var this = this;
         async.forEach(this.onRequestEndHandlers, function (fn, callback) {
             return fn(ctx, callback);
         }, function (err) {
@@ -499,7 +501,7 @@ var ContextCallbacks = (function (_super) {
     /** Jason Port notes: belongs on Proxy.  internally enumerates ctx handlers */
     ContextCallbacks.prototype._onResponseData = function (ctx, chunk, callback) {
         log.assert(this === ctx, "assume same obj");
-        var self = this;
+        //var this = this;
         async.forEach(this.onResponseDataHandlers, function (fn, callback) {
             return fn(ctx, chunk, function (err, newChunk) {
                 if (err) {
@@ -519,7 +521,7 @@ var ContextCallbacks = (function (_super) {
     /** Jason Port notes: belongs on Proxy.  internally enumerates ctx handlers */
     ContextCallbacks.prototype._onResponseEnd = function (ctx, callback) {
         log.assert(this === ctx, "assume same obj");
-        var self = this;
+        //var this = this;
         async.forEach(this.onResponseEndHandlers, function (fn, callback) {
             return fn(ctx, callback);
         }, function (err) {
@@ -642,11 +644,12 @@ var Proxy = (function () {
     };
     /** Starts the proxy listening on the given port..  example: proxy.listen({ port: 80 }); */
     Proxy.prototype.listen = function (options, callback) {
+        var _this = this;
         if (options === void 0) { options = {}; }
         if (options.sslCaName == null) {
             options.sslCaName = "Chain Proxy";
         }
-        var self = this;
+        //var this = this;
         this.options = options;
         this.silent = !!options.silent;
         this.httpPort = options.port || 8080;
@@ -667,31 +670,31 @@ var Proxy = (function () {
                 }
                 return callback(err);
             }
-            self.ca = ca;
-            self.sslServers = {};
-            self.sslSemaphores = {};
-            self.httpServer = http.createServer();
-            self.httpServer.timeout = self.timeout;
-            //self.httpServer.on('error', self._onError.bind(self, 'HTTP_SERVER_ERROR'));
-            self.httpServer.on("error", function (err) { self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "proxy.httpServer.on('error')" }); });
-            self.httpServer.on('connect', self._onHttpServerConnect.bind(self));
-            self.httpServer.on('request', self._onHttpServerRequest.bind(self, false));
-            self.wsServer = new WebSocket.Server({ server: self.httpServer });
-            self.wsServer.on('connection', self._onWebSocketServerConnect.bind(self, false));
-            if (self.forceSNI) {
+            _this.ca = ca;
+            _this.sslServers = {};
+            _this.sslSemaphores = {};
+            _this.httpServer = http.createServer();
+            _this.httpServer.timeout = _this.timeout;
+            //this.httpServer.on('error', this._onError.bind(this, 'HTTP_SERVER_ERROR'));
+            _this.httpServer.on("error", function (err) { _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "proxy.httpServer.on('error')" }); });
+            _this.httpServer.on('connect', _this._onHttpServerConnect.bind(_this));
+            _this.httpServer.on('request', _this._onHttpServerRequest.bind(_this, false));
+            _this.wsServer = new WebSocket.Server({ server: _this.httpServer });
+            _this.wsServer.on('connection', _this._onWebSocketServerConnect.bind(_this, false));
+            if (_this.forceSNI) {
                 // start the single HTTPS server now
-                self._createHttpsServer({}, function (port, httpsServer, wssServer) {
-                    if (!self.silent) {
+                _this._createHttpsServer({}, function (port, httpsServer, wssServer) {
+                    if (!_this.silent) {
                         console.log('https server started on ' + port);
                     }
-                    self.httpsServer = httpsServer;
-                    self.wssServer = wssServer;
-                    self.httpsPort = port;
-                    self.httpServer.listen(self.httpPort, callback);
+                    _this.httpsServer = httpsServer;
+                    _this.wssServer = wssServer;
+                    _this.httpsPort = port;
+                    _this.httpServer.listen(_this.httpPort, callback);
                 });
             }
             else {
-                self.httpServer.listen(self.httpPort, callback);
+                _this.httpServer.listen(_this.httpPort, callback);
             }
         });
         return this;
@@ -725,7 +728,8 @@ var Proxy = (function () {
             
             proxy.close(); */
     Proxy.prototype.close = function () {
-        var self = this;
+        var _this = this;
+        //var this = this;
         this.httpServer.close();
         delete this.httpServer;
         if (this.httpsServer) {
@@ -736,10 +740,10 @@ var Proxy = (function () {
         }
         if (this.sslServers) {
             (Object.keys(this.sslServers)).forEach(function (srvName) {
-                var server = self.sslServers[srvName].server;
+                var server = _this.sslServers[srvName].server;
                 if (server)
                     server.close();
-                delete self.sslServers[srvName];
+                delete _this.sslServers[srvName];
             });
         }
         return this;
@@ -756,84 +760,40 @@ var Proxy = (function () {
     };
     ;
     Proxy.prototype._onHttpServerConnect = function (req, socket, head) {
-        var self = this;
+        //var this = this;
+        var _this = this;
         // you can forward HTTPS request directly by adding custom CONNECT method handler
-        return async.forEach(self.onConnectHandlers, function (fn, callback) {
-            return fn.call(self, req, socket, head, callback);
+        return async.forEach(this.onConnectHandlers, function (fn, callback) {
+            return fn.call(_this, req, socket, head, callback);
         }, function (err) {
             if (err) {
-                //return self._onError('ON_CONNECT_ERROR', err);
-                return self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "proxy._masterModDispatcher.onConnect() --> error", data: { req: req, socket: socket, head: head } });
+                //return this._onError('ON_CONNECT_ERROR', err);
+                return _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "proxy._masterModDispatcher.onConnect() --> error", data: { req: req, socket: socket, head: head } });
             }
             // we need first byte of data to detect if request is SSL encrypted
             if (!head || head.length === 0) {
-                socket.once('data', self._onHttpServerConnectData.bind(self, req, socket));
+                socket.once('data', _this._onHttpServerConnectData.bind(_this, req, socket));
                 socket.on("data", function (req, socket) {
                     //JASONS HACK: test listening to https socket
                     log.warn("socket.on.data", { req: req, socket: socket });
                 });
                 socket.write('HTTP/1.1 200 OK\r\n');
-                if (self.keepAlive && req.headers['proxy-connection'] === 'keep-alive') {
+                if (_this.keepAlive && req.headers['proxy-connection'] === 'keep-alive') {
                     socket.write('Proxy-Connection: keep-alive\r\n');
                     socket.write('Connection: keep-alive\r\n');
                 }
                 return socket.write('\r\n');
             }
             else {
-                self._onHttpServerConnectData(req, socket, head);
+                _this._onHttpServerConnectData(req, socket, head);
             }
         });
     };
     Proxy.prototype._onHttpServerConnectData = function (req, socket, head) {
-        var self = this;
+        //var this = this;
+        var _this = this;
         socket.pause();
-        /*
-        * Detect TLS from first bytes of data
-        * Inspired from https://gist.github.com/tg-x/835636
-        * used heuristic:
-        * - an incoming connection using SSLv3/TLSv1 records should start with 0x16
-        * - an incoming connection using SSLv2 records should start with the record size
-        *   and as the first record should not be very big we can expect 0x80 or 0x00 (the MSB is a flag)
-        * - everything else is considered to be unencrypted
-        */
-        if (head[0] == 0x16 || head[0] == 0x80 || head[0] == 0x00) {
-            // URL is in the form 'hostname:port'
-            var hostname = req.url.split(':', 2)[0];
-            var sslServer = this.sslServers[hostname];
-            if (sslServer) {
-                return makeConnection(sslServer.port);
-            }
-            var wilcardHost = hostname.replace(/[^\.]+\./, '*.');
-            var sem = self.sslSemaphores[wilcardHost];
-            if (!sem) {
-                sem = self.sslSemaphores[wilcardHost] = semaphore(1);
-            }
-            sem.take(function () {
-                if (self.sslServers[hostname]) {
-                    process.nextTick(sem.leave.bind(sem));
-                    return makeConnection(self.sslServers[hostname].port);
-                }
-                if (self.sslServers[wilcardHost]) {
-                    process.nextTick(sem.leave.bind(sem));
-                    self.sslServers[hostname] = {
-                        port: self.sslServers[wilcardHost]
-                    };
-                    return makeConnection(self.sslServers[hostname].port);
-                }
-                getHttpsServer(hostname, function (err, port) {
-                    process.nextTick(sem.leave.bind(sem));
-                    if (err) {
-                        //return self._onError('OPEN_HTTPS_SERVER_ERROR', err);
-                        return self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "OPEN_HTTPS_SERVER_ERROR", data: { req: req, socket: socket, head: head } });
-                    }
-                    return makeConnection(port);
-                });
-            });
-        }
-        else {
-            return makeConnection(this.httpPort);
-        }
-        function makeConnection(port) {
+        var makeConnection = function (port) {
             // open a TCP connection to the remote host
             var conn = net.connect(port, function () {
                 // create a tunnel between the two hosts
@@ -842,11 +802,11 @@ var Proxy = (function () {
                 socket.emit('data', head);
                 return socket.resume();
             });
-            //conn.on('error', self._onError.bind(self, 'PROXY_TO_PROXY_SOCKET_ERROR'));
-            conn.on("error", function (err) { self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "PROXY_TO_PROXY_SOCKET_ERROR", data: { port: port } }); });
-        }
-        function getHttpsServer(hostname, callback) {
-            self.onCertificateRequired(hostname, function (err, files) {
+            //conn.on('error', this._onError.bind(this, 'PROXY_TO_PROXY_SOCKET_ERROR'));
+            conn.on("error", function (err) { _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "PROXY_TO_PROXY_SOCKET_ERROR", data: { port: port } }); });
+        };
+        var getHttpsServer = function (hostname, callback) {
+            _this.onCertificateRequired(hostname, function (err, files) {
                 async.auto({
                     'keyFileExists': function (callback) {
                         return fs.exists(files.keyFile, function (exists) {
@@ -882,7 +842,7 @@ var Proxy = (function () {
                                     'files': files,
                                     'data': data
                                 };
-                                return self.onCertificateMissing(info, files, function (err, files) {
+                                return _this.onCertificateMissing(info, files, function (err, files) {
                                     if (err) {
                                         return callback(err);
                                     }
@@ -909,23 +869,23 @@ var Proxy = (function () {
                         hosts = [hostname];
                     }
                     delete results.httpsOptions.hosts;
-                    if (self.forceSNI && !hostname.match(/^[\d\.]+$/)) {
-                        if (!self.silent) {
+                    if (_this.forceSNI && !hostname.match(/^[\d\.]+$/)) {
+                        if (!_this.silent) {
                             console.log('creating SNI context for ' + hostname);
                         }
                         hosts.forEach(function (host) {
-                            self.httpsServer.addContext(host, results.httpsOptions);
-                            self.sslServers[host] = { port: self.httpsPort };
+                            _this.httpsServer.addContext(host, results.httpsOptions);
+                            _this.sslServers[host] = { port: _this.httpsPort };
                         });
-                        return callback(null, self.httpsPort);
+                        return callback(null, _this.httpsPort);
                     }
                     else {
-                        if (!self.silent) {
+                        if (!_this.silent) {
                             console.log('starting server for ' + hostname);
                         }
                         results.httpsOptions.hosts = hosts;
-                        self._createHttpsServer(results.httpsOptions, function (port, httpsServer, wssServer) {
-                            if (!self.silent) {
+                        _this._createHttpsServer(results.httpsOptions, function (port, httpsServer, wssServer) {
+                            if (!_this.silent) {
                                 console.log('https server started for %s on %s', hostname, port);
                             }
                             var sslServer = {
@@ -934,21 +894,67 @@ var Proxy = (function () {
                                 port: port
                             };
                             hosts.forEach(function (host) {
-                                self.sslServers[hostname] = sslServer;
+                                _this.sslServers[hostname] = sslServer;
                             });
                             return callback(null, port);
                         });
                     }
                 });
             });
+        };
+        /*
+        * Detect TLS from first bytes of data
+        * Inspired from https://gist.github.com/tg-x/835636
+        * used heuristic:
+        * - an incoming connection using SSLv3/TLSv1 records should start with 0x16
+        * - an incoming connection using SSLv2 records should start with the record size
+        *   and as the first record should not be very big we can expect 0x80 or 0x00 (the MSB is a flag)
+        * - everything else is considered to be unencrypted
+        */
+        if (head[0] == 0x16 || head[0] == 0x80 || head[0] == 0x00) {
+            // URL is in the form 'hostname:port'
+            var hostname = req.url.split(':', 2)[0];
+            var sslServer = this.sslServers[hostname];
+            if (sslServer) {
+                return makeConnection(sslServer.port);
+            }
+            var wilcardHost = hostname.replace(/[^\.]+\./, '*.');
+            var sem = this.sslSemaphores[wilcardHost];
+            if (!sem) {
+                sem = this.sslSemaphores[wilcardHost] = semaphore(1);
+            }
+            sem.take(function () {
+                if (_this.sslServers[hostname]) {
+                    process.nextTick(sem.leave.bind(sem));
+                    return makeConnection(_this.sslServers[hostname].port);
+                }
+                if (_this.sslServers[wilcardHost]) {
+                    process.nextTick(sem.leave.bind(sem));
+                    _this.sslServers[hostname] = {
+                        port: _this.sslServers[wilcardHost]
+                    };
+                    return makeConnection(_this.sslServers[hostname].port);
+                }
+                getHttpsServer(hostname, function (err, port) {
+                    process.nextTick(sem.leave.bind(sem));
+                    if (err) {
+                        //return this._onError('OPEN_HTTPS_SERVER_ERROR', err);
+                        return _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "OPEN_HTTPS_SERVER_ERROR", data: { req: req, socket: socket, head: head } });
+                    }
+                    return makeConnection(port);
+                });
+            });
+        }
+        else {
+            return makeConnection(this.httpPort);
         }
     };
     ;
     Proxy.prototype.onCertificateRequired = function (hostname, callback) {
-        var self = this;
+        //var this = this;
         callback(null, {
-            keyFile: self.sslCaDir + '/keys/' + hostname + '.key',
-            certFile: self.sslCaDir + '/certs/' + hostname + '.pem',
+            keyFile: this.sslCaDir + '/keys/' + hostname + '.key',
+            certFile: this.sslCaDir + '/certs/' + hostname + '.pem',
             hosts: [hostname]
         });
         return this;
@@ -972,7 +978,7 @@ var Proxy = (function () {
      * @param ws
      */
     Proxy.prototype._onWebSocketServerConnect = function (isSSL, ws) {
-        var self = this;
+        //var this = this;
         var ctx = new IContext();
         ctx.isSSL = isSSL;
         ctx.clientToProxyWebSocket = ws;
@@ -995,7 +1001,7 @@ var Proxy = (function () {
         }
         ctx.proxyToServerWebSocketOptions = {
             url: url,
-            agent: ctx.isSSL ? self.httpsAgent : self.httpAgent,
+            agent: ctx.isSSL ? this.httpsAgent : this.httpAgent,
             headers: ptosHeaders,
             //bugfix not fully configured websocket options.   see https://github.com/joeferner/node-http-mitm-proxy/issues/120
             protocol: ctx.clientToProxyWebSocket.protocol,
@@ -1034,7 +1040,8 @@ var Proxy = (function () {
         });
     };
     Proxy.prototype._onHttpServerRequest = function (isSSL, clientToProxyRequest, proxyToClientResponse) {
-        var self = this;
+        //var this = this;
+        var _this = this;
         var ctx = new IContext();
         ctx.isSSL = isSSL;
         ctx.clientToProxyRequest = clientToProxyRequest;
@@ -1055,9 +1062,9 @@ var Proxy = (function () {
         return this.onContextInitialize.invoke(this, { ctx: ctx })
             .then(function () {
             //ctx.clientToProxyRequest.on('error', ctx._onError.bind(ctx, 'CLIENT_TO_PROXY_REQUEST_ERROR', ctx));
-            ctx.clientToProxyRequest.on("error", function (err) { self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "CLIENT_TO_PROXY_REQUEST_ERROR", ctx: ctx }); });
+            ctx.clientToProxyRequest.on("error", function (err) { _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "CLIENT_TO_PROXY_REQUEST_ERROR", ctx: ctx }); });
             //ctx.proxyToClientResponse.on('error', ctx._onError.bind(ctx, 'PROXY_TO_CLIENT_RESPONSE_ERROR', ctx));
-            ctx.proxyToClientResponse.on("error", function (err) { self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "PROXY_TO_CLIENT_RESPONSE_ERROR", ctx: ctx }); });
+            ctx.proxyToClientResponse.on("error", function (err) { _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "PROXY_TO_CLIENT_RESPONSE_ERROR", ctx: ctx }); });
             var hostPort = utils.parseHostAndPort(ctx.clientToProxyRequest, ctx.isSSL ? 443 : 80);
             var headers = {};
             for (var h in ctx.clientToProxyRequest.headers) {
@@ -1081,27 +1088,26 @@ var Proxy = (function () {
                 host: hostPort.host,
                 port: hostPort.port,
                 headers: headers,
-                agent: ctx.isSSL ? self.httpsAgent : self.httpAgent
+                agent: ctx.isSSL ? _this.httpsAgent : _this.httpAgent
             };
-            //JASON EDIT: wrapping self._onRequest in a function to make recallable when upstream proxy errors.
-            function callOnRequestHandlersThenMakeProxyRequest() {
+            //JASON EDIT: wrapping this._onRequest in a function to make recallable when upstream proxy errors.
+            var callOnRequestHandlersThenMakeProxyRequest = function () {
                 return ctx._onRequest(ctx, function (err) {
                     if (err) {
                         //return ctx._onError('ON_REQUEST_ERROR', ctx, err);
-                        return self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "ON_REQUEST_ERROR", ctx: ctx, });
+                        return _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "ON_REQUEST_ERROR", ctx: ctx, });
                     }
                     return ctx._onRequestHeaders(ctx, function (err) {
                         if (err) {
                             //return ctx._onError('ON_REQUESTHEADERS_ERROR', ctx, err);
-                            return self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "ON_REQUESTHEADERS_ERROR", ctx: ctx, });
+                            return _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "ON_REQUESTHEADERS_ERROR", ctx: ctx, });
                         }
                         return makeProxyToServerRequest();
                     });
                 });
-            }
-            return callOnRequestHandlersThenMakeProxyRequest();
+            };
             //JASON EDIT:  helper to handle errors from proxyToServerRequest (retry them)
-            function handleProxyToServerRequestError(kind, ctx, err) {
+            var handleProxyToServerRequestError = function (kind, ctx, err) {
                 ctx.tags.failedUpstreamCalls++;
                 console.log("ERRRRRRRRRRRRRR!!!!!\n\n\n!!!!!\n\n\n", ctx.tags.failedUpstreamCalls, ctx.tags.uri);
                 if (ctx.tags.retryProxyRequest === true) {
@@ -1109,21 +1115,21 @@ var Proxy = (function () {
                 }
                 else {
                     //ctx._onError('PROXY_TO_SERVER_REQUEST_ERROR', ctx, err);						
-                    return self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "PROXY_TO_SERVER_REQUEST_ERROR", ctx: ctx, });
+                    return _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "PROXY_TO_SERVER_REQUEST_ERROR", ctx: ctx, });
                 }
-            }
-            function makeProxyToServerRequest() {
+            };
+            var makeProxyToServerRequest = function () {
                 var proto = (ctx.isSSL ? https : http);
                 ctx.proxyToServerRequest = proto.request(ctx.proxyToServerRequestOptions, proxyToServerRequestComplete);
                 //JASON EDIT: wacky binding scheme to simply call our new handleProxyToServerRequestError() function
-                ctx.proxyToServerRequest.on('error', handleProxyToServerRequestError.bind(self, 'PROXY_TO_SERVER_REQUEST_ERROR', ctx));
+                ctx.proxyToServerRequest.on('error', handleProxyToServerRequestError.bind(_this, 'PROXY_TO_SERVER_REQUEST_ERROR', ctx));
                 //JASON EDIT: hack because we recall this, don't want stale "ProxyFinalRequestFilter" from our last call to makeProxyToServerRequest() (previous proxy attempt)
-                //ctx.requestFilters.push(new ProxyFinalRequestFilter(self, ctx));
-                var proxyFinalRequestFilter = new ProxyFinalRequestFilter(self, ctx);
+                //ctx.requestFilters.push(new ProxyFinalRequestFilter(this, ctx));
+                var proxyFinalRequestFilter = new ProxyFinalRequestFilter(_this, ctx);
                 var prevRequestPipeElem = ctx.clientToProxyRequest;
                 ctx.requestFilters.forEach(function (filter) {
                     //filter.on('error', ctx._onError.bind(ctx, 'REQUEST_FILTER_ERROR', ctx));
-                    filter.on("error", function (err) { self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "REQUEST_FILTER_ERROR", ctx: ctx }); });
+                    filter.on("error", function (err) { _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "REQUEST_FILTER_ERROR", ctx: ctx }); });
                     try {
                         prevRequestPipeElem = prevRequestPipeElem.pipe(filter);
                     }
@@ -1139,7 +1145,7 @@ var Proxy = (function () {
                     console.log("why error oh WHY DEUX?!?!?", ex, prevRequestPipeElem.pipe, prevRequestPipeElem);
                 }
                 ctx.clientToProxyRequest.resume();
-            }
+            };
             // private _onError(kind, ctx, err) {
             //   this.onErrorHandlers.forEach(function (handler) {
             //     return handler(ctx, err, kind);
@@ -1164,19 +1170,19 @@ var Proxy = (function () {
             //     }
             //   }
             // };
-            function proxyToServerRequestComplete(serverToProxyResponse) {
+            var proxyToServerRequestComplete = function (serverToProxyResponse) {
                 //serverToProxyResponse.on('error', ctx._onError.bind(ctx, 'SERVER_TO_PROXY_RESPONSE_ERROR', ctx));
-                serverToProxyResponse.on("error", function (err) { self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "SERVER_TO_PROXY_RESPONSE_ERROR", ctx: ctx }); });
+                serverToProxyResponse.on("error", function (err) { _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "SERVER_TO_PROXY_RESPONSE_ERROR", ctx: ctx }); });
                 serverToProxyResponse.pause();
                 ctx.serverToProxyResponse = serverToProxyResponse;
                 return ctx._onResponse(ctx, function (err) {
                     if (err) {
                         //return ctx._onError('ON_RESPONSE_ERROR', ctx, err);
-                        return self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "ON_RESPONSE_ERROR", ctx: ctx, });
+                        return _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_ERROR", ctx: ctx, });
                     }
                     ctx.serverToProxyResponse.headers['transfer-encoding'] = 'chunked';
                     delete ctx.serverToProxyResponse.headers['content-length'];
-                    if (self.keepAlive) {
+                    if (_this.keepAlive) {
                         if (ctx.clientToProxyRequest.headers['proxy-connection']) {
                             ctx.serverToProxyResponse.headers['proxy-connection'] = 'keep-alive';
                             ctx.serverToProxyResponse.headers['connection'] = 'keep-alive';
@@ -1188,65 +1194,26 @@ var Proxy = (function () {
                     return ctx._onResponseHeaders(ctx, function (err) {
                         if (err) {
                             //return ctx._onError('ON_RESPONSEHEADERS_ERROR', ctx, err);
-                            return self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "ON_RESPONSEHEADERS_ERROR", ctx: ctx, });
+                            return _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSEHEADERS_ERROR", ctx: ctx, });
                         }
                         ctx.proxyToClientResponse.writeHead(ctx.serverToProxyResponse.statusCode, utils.filterAndCanonizeHeaders(ctx.serverToProxyResponse.headers));
-                        ctx.responseFilters.push(new ProxyFinalResponseFilter(self, ctx));
+                        ctx.responseFilters.push(new ProxyFinalResponseFilter(_this, ctx));
                         var prevResponsePipeElem = ctx.serverToProxyResponse;
                         ctx.responseFilters.forEach(function (filter) {
                             //filter.on('error', ctx._onError.bind(ctx, 'RESPONSE_FILTER_ERROR', ctx));
-                            filter.on("error", function (err) { self._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "RESPONSE_FILTER_ERROR", ctx: ctx }); });
+                            filter.on("error", function (err) { _this._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "RESPONSE_FILTER_ERROR", ctx: ctx }); });
                             prevResponsePipeElem = prevResponsePipeElem.pipe(filter);
                         });
                         return ctx.serverToProxyResponse.resume();
                     });
                 });
-            }
+            };
+            return callOnRequestHandlersThenMakeProxyRequest();
         });
     };
     return Proxy;
 }());
 exports.Proxy = Proxy;
-////////////////////  END OF PROXY CLASS
-// var ProxyFinalRequestFilter = function (proxy, ctx) {
-//   events.EventEmitter.call(this);
-//   this.writable = true;
-//   this.write = function (chunk) {
-//     proxy._onRequestData(ctx, chunk, function (err, chunk) {
-//       if (err) {
-//         return ctx._onError('ON_REQUEST_DATA_ERROR', ctx, err);
-//       }
-//       if (chunk) {
-//         return ctx.proxyToServerRequest.write(chunk);
-//       }
-//     });
-//     return true;
-//   };
-// //
-//   this.end = function (chunk) {
-//     if (chunk) {
-//       return proxy._onRequestData(ctx, chunk, function (err, chunk) {
-//         if (err) {
-//           return proxy._onError('ON_REQUEST_DATA_ERROR', ctx, err);
-//         }
-//         return proxy._onRequestEnd(ctx, function (err) {
-//           if (err) {
-//             return proxy._onError('ON_REQUEST_END_ERROR', ctx, err);
-//           }
-//           return ctx.proxyToServerRequest.end(chunk);
-//         });
-//       });
-//     } else {
-//       return proxy._onRequestEnd(ctx, function (err) {
-//         if (err) {
-//           return proxy._onError('ON_REQUEST_END_ERROR', ctx, err);
-//         }
-//         return ctx.proxyToServerRequest.end(chunk || undefined);
-//       });
-//     }
-//   };
-// };
-// util.inherits(ProxyFinalRequestFilter, events.EventEmitter);
 var ProxyFinalRequestFilter = (function (_super) {
     __extends(ProxyFinalRequestFilter, _super);
     function ProxyFinalRequestFilter(proxy, ctx) {
@@ -1258,43 +1225,45 @@ var ProxyFinalRequestFilter = (function (_super) {
         return _this;
     }
     ProxyFinalRequestFilter.prototype.write = function (chunk) {
-        var self = this;
-        self.ctx._onRequestData(self.ctx, chunk, function (err, chunk) {
+        var _this = this;
+        //const this = this;
+        this.ctx._onRequestData(this.ctx, chunk, function (err, chunk) {
             if (err) {
-                //return self.ctx._onError('ON_REQUEST_DATA_ERROR', self.ctx, err);
-                return self.proxy._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "ON_REQUEST_DATA_ERROR", ctx: self.ctx, });
+                //return this.ctx._onError('ON_REQUEST_DATA_ERROR', this.ctx, err);
+                return _this.proxy._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "ON_REQUEST_DATA_ERROR", ctx: _this.ctx, });
             }
             if (chunk) {
-                return self.ctx.proxyToServerRequest.write(chunk);
+                return _this.ctx.proxyToServerRequest.write(chunk);
             }
         });
         return true;
     };
     ;
     ProxyFinalRequestFilter.prototype.end = function (chunk) {
-        var self = this;
+        var _this = this;
+        //const this = this;
         if (chunk) {
-            return self.ctx._onRequestData(self.ctx, chunk, function (err, chunk) {
+            return this.ctx._onRequestData(this.ctx, chunk, function (err, chunk) {
                 if (err) {
-                    //return self.ctx._onError('ON_REQUEST_DATA_ERROR', self.ctx, err);
-                    return self.proxy._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "ON_REQUEST_DATA_ERROR", ctx: self.ctx, });
+                    //return this.ctx._onError('ON_REQUEST_DATA_ERROR', this.ctx, err);
+                    return _this.proxy._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "ON_REQUEST_DATA_ERROR", ctx: _this.ctx, });
                 }
-                return self.ctx._onRequestEnd(self.ctx, function (err) {
+                return _this.ctx._onRequestEnd(_this.ctx, function (err) {
                     if (err) {
-                        //return self.ctx._onError('ON_REQUEST_END_ERROR', self.ctx, err);
-                        return self.proxy._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "ON_REQUEST_END_ERROR", ctx: self.ctx, });
+                        //return this.ctx._onError('ON_REQUEST_END_ERROR', this.ctx, err);
+                        return _this.proxy._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "ON_REQUEST_END_ERROR", ctx: _this.ctx, });
                     }
-                    return self.ctx.proxyToServerRequest.end(chunk);
+                    return _this.ctx.proxyToServerRequest.end(chunk);
                 });
             });
         }
         else {
-            return self.ctx._onRequestEnd(self.ctx, function (err) {
+            return this.ctx._onRequestEnd(this.ctx, function (err) {
                 if (err) {
-                    //return self.ctx._onError('ON_REQUEST_END_ERROR', self.ctx, err);
-                    return self.proxy._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "ON_REQUEST_END_ERROR", ctx: self.ctx, });
+                    //return this.ctx._onError('ON_REQUEST_END_ERROR', this.ctx, err);
+                    return _this.proxy._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "ON_REQUEST_END_ERROR", ctx: _this.ctx, });
                 }
-                return self.ctx.proxyToServerRequest.end(chunk || undefined);
+                return _this.ctx.proxyToServerRequest.end(chunk || undefined);
             });
         }
     };
@@ -1312,43 +1281,45 @@ var ProxyFinalResponseFilter = (function (_super) {
         return _this;
     }
     ProxyFinalResponseFilter.prototype.write = function (chunk) {
-        var self = this;
-        self.ctx._onResponseData(self.ctx, chunk, function (err, chunk) {
+        var _this = this;
+        //const this = this;
+        this.ctx._onResponseData(this.ctx, chunk, function (err, chunk) {
             if (err) {
-                //return self.ctx._onError('ON_RESPONSE_DATA_ERROR', self.ctx, err);
-                return self.proxy._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "ON_RESPONSE_DATA_ERROR", ctx: self.ctx, });
+                //return this.ctx._onError('ON_RESPONSE_DATA_ERROR', this.ctx, err);
+                return _this.proxy._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_DATA_ERROR", ctx: _this.ctx, });
             }
             if (chunk) {
-                return self.ctx.proxyToClientResponse.write(chunk);
+                return _this.ctx.proxyToClientResponse.write(chunk);
             }
         });
         return true;
     };
     ;
     ProxyFinalResponseFilter.prototype.end = function (chunk) {
-        var self = this;
+        var _this = this;
+        //const this = this;
         if (chunk) {
-            return self.ctx._onResponseData(self.ctx, chunk, function (err, chunk) {
+            return this.ctx._onResponseData(this.ctx, chunk, function (err, chunk) {
                 if (err) {
-                    //return self.ctx._onError('ON_RESPONSE_DATA_ERROR', self.ctx, err);
-                    return self.proxy._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "ON_RESPONSE_DATA_ERROR", ctx: self.ctx, });
+                    //return this.ctx._onError('ON_RESPONSE_DATA_ERROR', this.ctx, err);
+                    return _this.proxy._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_DATA_ERROR", ctx: _this.ctx, });
                 }
-                return self.ctx._onResponseEnd(self.ctx, function (err) {
+                return _this.ctx._onResponseEnd(_this.ctx, function (err) {
                     if (err) {
-                        //return self.ctx._onError('ON_RESPONSE_END_ERROR', self.ctx, err);
-                        return self.proxy._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "ON_RESPONSE_END_ERROR", ctx: self.ctx, });
+                        //return this.ctx._onError('ON_RESPONSE_END_ERROR', this.ctx, err);
+                        return _this.proxy._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_END_ERROR", ctx: _this.ctx, });
                     }
-                    return self.ctx.proxyToClientResponse.end(chunk || undefined);
+                    return _this.ctx.proxyToClientResponse.end(chunk || undefined);
                 });
             });
         }
         else {
-            return self.ctx._onResponseEnd(self.ctx, function (err) {
+            return this.ctx._onResponseEnd(this.ctx, function (err) {
                 if (err) {
-                    //return self.ctx._onError('ON_RESPONSE_END_ERROR', self.ctx, err);
-                    return self.proxy._masterModDispatcher.onError.invoke(self, { err: err, errorKind: "ON_RESPONSE_END_ERROR", ctx: self.ctx, });
+                    //return this.ctx._onError('ON_RESPONSE_END_ERROR', this.ctx, err);
+                    return _this.proxy._masterModDispatcher.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_END_ERROR", ctx: _this.ctx, });
                 }
-                return self.ctx.proxyToClientResponse.end(chunk || undefined);
+                return _this.ctx.proxyToClientResponse.end(chunk || undefined);
             });
         }
     };
