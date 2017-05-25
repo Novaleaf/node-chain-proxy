@@ -76,7 +76,10 @@ export class EventBroadcastPipe<TSender, TArgs>{
 						return _looper(index + 1, resultingArgs);
 					}
 				});
+		}
 
+		if (this._storage.length === 0) {
+			return Promise.resolve(initialArgs);
 		}
 		return _looper(0, initialArgs);
 	}
@@ -104,6 +107,7 @@ export class EventBroadcastLimited<TSender, TArgs, TResult>{
 	/**
 	 *  dispatch will be completed once the first successfull subscribed function resolves (executed in a sequential, FIFO order)
 	if all subscribed functions fail, the last failure is returned.
+	if no subscribers are present, a resolved Promise with an undefined result is returned.
 	 * @param sender
 	 * @param args
 	 */
@@ -116,7 +120,9 @@ export class EventBroadcastLimited<TSender, TArgs, TResult>{
 					}
 					return _looper(index + 1);
 				});
-
+		}
+		if (this._storage.length === 0) {
+			return Promise.resolve(undefined);
 		}
 		return _looper(0);
 	}
@@ -139,6 +145,7 @@ export class EventBroadcast<TSender, TArgs, TResult>  {
 
 	/**
 	 *  dispatch will not be completed until all subscriber functions resolve.
+	if no subscribers are present, a resolved Promise with an empty array result is returned.
 	 * @param sender
 	 * @param args
 	 */
@@ -210,11 +217,15 @@ check ctx.url.protocol to decide what events to bind.  http, https, or ws */
 	public onResponseEnd = new EventBroadcast<Proxy, { ctx: IContext }, void>();
 
 	/** allows retrying the request to upstream if desired (via the returned promise results), if so, the callbacks from ```onRequest``` onward will be retried.  */
-	public onProxyToUpstreamRequestError = new EventBroadcastLimited<http.ClientRequest, { ctx: IContext; err: Error;}, { retry?: boolean;}>();
+	public onProxyToUpstreamRequestError = new EventBroadcastLimited<http.ClientRequest, { ctx: IContext; err: Error; }, { retry?: boolean; }>();
 
 
 	//proxy specific callbacks
-	public onConnect = new EventBroadcast<Proxy, { req: http.IncomingMessage; socket: net.Socket; head: any; }, void>();
+	public onConnect = new EventBroadcast<Proxy, { req: http.IncomingMessage; socket: net.Socket; head: Buffer; isSsl: boolean; otherArg: any; }, void>();
+
+
+	public onCertificateRequired = new EventBroadcastLimited<Proxy, { hostname: string }, ICertificatePaths>();
+	public onCertificateMissing = new EventBroadcastLimited<Proxy, { info: ICertificateMissingHint, files: ICertificatePaths},ICertificateData>()
 
 }
 
@@ -804,7 +815,7 @@ export class Proxy {
 		//attach all callbacks from mod to our masterDispatcher
 		_.forOwn(mod, (dispatcher, key) => {
 			_.forEach(dispatcher._storage, (callback) => {
-				log.info(`attaching mod.${key} to proxy._masterModDispatcher`);
+				log.info(`attaching mod.${key} to proxy._masterModDispatcher.  callback=`,callback);
 				this.callbacks[key].subscribe(callback)
 			});
 		});
@@ -887,6 +898,31 @@ export class Proxy {
 
 				closeWebsocket(ctx);
 			});
+
+			defaultCallbacks.onCertificateRequired.subscribe((sender, args) => {
+
+				const hostname = args.hostname;
+
+				return Promise.resolve({
+					keyFile: this.sslCaDir + '/keys/' + hostname + '.key',
+					certFile: this.sslCaDir + '/certs/' + hostname + '.pem',
+					hosts: [hostname]
+				});
+			
+			});
+
+			defaultCallbacks.onCertificateMissing.subscribe((sender, args) => {
+				var hosts = args.files.hosts || [args.info.hostname];
+				return new Promise<ICertificateData>((resolve, reject) => {
+					this.ca.generateServerCertificateKeys(hosts, function (certPEM, privateKeyPEM) {
+						return resolve({
+							certFileData: certPEM,
+							keyFileData: privateKeyPEM,
+							hosts: hosts
+						});
+					});
+				});
+			});
 		}
 
 
@@ -898,26 +934,26 @@ export class Proxy {
 
 
 	}
-	public use(mod: any) {
+	//public use(mod: any) {
 
 
 
-		if (mod.onCertificateRequired) {
-			this.onCertificateRequired = mod.onCertificateRequired;
-		}
-		if (mod.onCertificateMissing) {
-			this.onCertificateMissing = mod.onCertificateMissing;
-		}
-		if (mod.onConnect) {
-			this.onConnect(mod.onConnect);
-		}
-		//return super.use(mod);
-		this.mods.push(mod);
-	}
-	/** hook all mods to be attached to context when created */
-	public mods: any[] = [];
+	//	if (mod.onCertificateRequired) {
+	//		this.onCertificateRequired = mod.onCertificateRequired;
+	//	}
+	//	if (mod.onCertificateMissing) {
+	//		this.onCertificateMissing = mod.onCertificateMissing;
+	//	}
+	//	//if (mod.onConnect) {
+	//	//	this.onConnect(mod.onConnect);
+	//	//}
+	//	//return super.use(mod);
+	//	this.mods.push(mod);
+	//}
+	///** hook all mods to be attached to context when created */
+	//public mods: any[] = [];
 
-	public onConnectHandlers: ((req: http.IncomingMessage, socket: net.Socket, head: any, callback: (error: Error | undefined) => void) => void)[] = [];
+	//public onConnectHandlers: ((req: http.IncomingMessage, socket: net.Socket, head: any, callback: (error: Error | undefined) => void) => void)[] = [];
 
 
 	public options: IProxyListenOptions;
@@ -978,7 +1014,10 @@ export class Proxy {
 			//this.httpServer.on('error', this._onError.bind(this, 'HTTP_SERVER_ERROR'));
 			this.httpServer.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "proxy.httpServer.on('error')" }); });
 
-			this.httpServer.on('connect', this._onHttpServerConnect.bind(this));
+			//this.httpServer.on('connect', this._onHttpServerConnect.bind(this));
+			this.httpServer.on("connect", (req: http.IncomingMessage, socket: net.Socket, head: any, otherArg: any) => {
+				this._onHttpServerConnect({ req, socket, head, otherArg, isSsl: false });
+			});
 			this.httpServer.on('request', this._onHttpServerRequest.bind(this, false));
 			this.wsServer = new WebSocket.Server({ server: this.httpServer });
 			this.wsServer.on('connection', this._onWebSocketServerConnect.bind(this, false));
@@ -1007,7 +1046,10 @@ export class Proxy {
 		httpsServer.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "proxy.httpsServer.on('error')" }); });
 		//httpsServer.on('clientError', this._onError.bind(this, 'HTTPS_CLIENT_ERROR'));
 		httpsServer.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "proxy.httpsServer.on('clientError')" }); });
-		httpsServer.on('connect', this._onHttpServerConnect.bind(this));
+		//httpsServer.on('connect', this._onHttpServerConnect.bind(this));
+		this.httpServer.on("connect", (req: http.IncomingMessage, socket: net.Socket, head: Buffer, otherArg: any) => {
+			this._onHttpServerConnect({ req, socket, head, otherArg, isSsl: true });
+		})
 		httpsServer.on('request', this._onHttpServerRequest.bind(this, true));
 		var wssServer = new WebSocket.Server({ server: httpsServer });
 		wssServer.on('connection', this._onWebSocketServerConnect.bind(this, true));
@@ -1048,47 +1090,73 @@ export class Proxy {
 		return this;
 	};
 
-	/**
-	 * Add custom handler for CONNECT method
-	 * @augments
-	 *   - fn(req,socket,head,callback) be called on receiving CONNECT method
-	 */
-	public onConnect(fn: (req: http.IncomingMessage, socket: net.Socket, head: any, callback: (error: Error | undefined) => void) => void) {
-		this.onConnectHandlers.push(fn);
-		return this;
-	};
+	///**
+	// * Add custom handler for CONNECT method
+	// * @augments
+	// *   - fn(req,socket,head,callback) be called on receiving CONNECT method
+	// */
+	//public onConnect(fn: (req: http.IncomingMessage, socket: net.Socket, head: any, callback: (error: Error | undefined) => void) => void) {
+	//	this.onConnectHandlers.push(fn);
+	//	return this;
+	//};
 
 
 
 
-	private _onHttpServerConnect(req, socket, head) {
-		//var this = this;
+	private _onHttpServerConnect(args: { req: http.IncomingMessage; socket: net.Socket; head: Buffer; isSsl: boolean; otherArg: any; }) {
+		////var this = this;
 
-		// you can forward HTTPS request directly by adding custom CONNECT method handler
-		return async.forEach(this.onConnectHandlers, (fn: Function, callback) => {
-			return fn.call(this, req, socket, head, callback)
-		}, (err: Error) => {
-			if (err) {
-				//return this._onError('ON_CONNECT_ERROR', err);
-				return this.callbacks.onError.invoke(this, { err, errorKind: "proxy._masterModDispatcher.onConnect() --> error", data: { req, socket, head } });
-			}
-			// we need first byte of data to detect if request is SSL encrypted
-			if (!head || head.length === 0) {
-				socket.once('data', this._onHttpServerConnectData.bind(this, req, socket));
-				socket.on("data", (req, socket) => {
-					//JASONS HACK: test listening to https socket
-					log.warn("socket.on.data", { req, socket });
-				})
-				socket.write('HTTP/1.1 200 OK\r\n');
-				if (this.keepAlive && req.headers['proxy-connection'] === 'keep-alive') {
-					socket.write('Proxy-Connection: keep-alive\r\n');
-					socket.write('Connection: keep-alive\r\n');
+		//// you can forward HTTPS request directly by adding custom CONNECT method handler
+		//return async.forEach(this.onConnectHandlers, (fn: Function, callback) => {
+		//	return fn.call(this, req, socket, head, callback)
+		//}, (err: Error) => {
+		//	if (err) {
+		//		//return this._onError('ON_CONNECT_ERROR', err);
+		//		return this.callbacks.onError.invoke(this, { err, errorKind: "proxy._masterModDispatcher.onConnect() --> error", data: { req, socket, head } });
+		//	}
+		//	// we need first byte of data to detect if request is SSL encrypted
+		//	if (!head || head.length === 0) {
+		//		socket.once('data', this._onHttpServerConnectData.bind(this, req, socket));
+		//		socket.on("data", (req, socket) => {
+		//			//JASONS HACK: test listening to https socket
+		//			log.warn("socket.on.data", { req, socket });
+		//		})
+		//		socket.write('HTTP/1.1 200 OK\r\n');
+		//		if (this.keepAlive && req.headers['proxy-connection'] === 'keep-alive') {
+		//			socket.write('Proxy-Connection: keep-alive\r\n');
+		//			socket.write('Connection: keep-alive\r\n');
+		//		}
+		//		return socket.write('\r\n');
+		//	} else {
+		//		this._onHttpServerConnectData(req, socket, head)
+		//	}
+		//	})
+
+		return this.callbacks.onConnect.invoke(this, args)
+			.then(() => {
+				const { head, req, socket } = args;
+
+				// we need first byte of data to detect if request is SSL encrypted
+				if (!head || head.length === 0) {
+					socket.once('data', this._onHttpServerConnectData.bind(this, req, socket));
+					socket.on("data", (req, socket) => {
+						//JASONS HACK: test listening to https socket
+						log.warn("socket.on.data", { req, socket });
+					})
+					socket.write('HTTP/1.1 200 OK\r\n');
+					if (this.keepAlive && req.headers['proxy-connection'] === 'keep-alive') {
+						socket.write('Proxy-Connection: keep-alive\r\n');
+						socket.write('Connection: keep-alive\r\n');
+					}
+					return socket.write('\r\n');
+				} else {
+					this._onHttpServerConnectData(req, socket, head)
 				}
-				return socket.write('\r\n');
-			} else {
-				this._onHttpServerConnectData(req, socket, head)
-			}
-		})
+			})
+			.catch((err) => {
+				this.callbacks.onError.invoke(this, { err, errorKind: "proxy._masterModDispatcher.onConnect() --> error", data: args });
+				return Promise.reject(err);
+			});
 	}
 
 
@@ -1114,103 +1182,121 @@ export class Proxy {
 
 
 		const getHttpsServer = (hostname, callback) => {
-			this.onCertificateRequired(hostname, (err, files) => {
-				async.auto({
-					'keyFileExists': function (callback) {
 
-						return fs.exists(files.keyFile, function (exists) {
-							return callback(null, exists);
-						});
-					},
-					'certFileExists': function (callback) {
-						return fs.exists(files.certFile, function (exists) {
-							return callback(null, exists);
-						});
-					},
-					'httpsOptions': ['keyFileExists', 'certFileExists', (data: { keyFileExists: boolean; certFileExists: boolean; }, callback) => {
-						if (data.keyFileExists && data.certFileExists) {
-							return fs.readFile(files.keyFile, function (err, keyFileData) {
-								if (err) {
-									return callback(err);
-								}
+			//this.onCertificateRequired(hostname, (err, files) => {
+			return this.callbacks.onCertificateRequired.invoke(this, { hostname })
+				.then((files) => {
 
-								return fs.readFile(files.certFile, function (err, certFileData) {
+					async.auto({
+						'keyFileExists': function (callback) {
+
+							return fs.exists(files.keyFile, function (exists) {
+								return callback(null, exists);
+							});
+						},
+						'certFileExists': function (callback) {
+							return fs.exists(files.certFile, function (exists) {
+								return callback(null, exists);
+							});
+						},
+						'httpsOptions': ['keyFileExists', 'certFileExists', (data: { keyFileExists: boolean; certFileExists: boolean; }, callback) => {
+							if (data.keyFileExists && data.certFileExists) {
+								return fs.readFile(files.keyFile, function (err, keyFileData) {
 									if (err) {
 										return callback(err);
 									}
 
-									return callback(null, {
-										key: keyFileData,
-										cert: certFileData,
-										hosts: files.hosts
+									return fs.readFile(files.certFile, function (err, certFileData) {
+										if (err) {
+											return callback(err);
+										}
+
+										return callback(null, {
+											key: keyFileData,
+											cert: certFileData,
+											hosts: files.hosts
+										});
 									});
 								});
-							});
-						} else {
-							var info = {
-								'hostname': hostname,
-								'files': files,
-								'data': data
-							};
+							} else {
+								var info = {
+									'hostname': hostname,
+									'files': files,
+									'data': data
+								};
 
-							return this.onCertificateMissing(info, files, function (err, files) {
-								if (err) {
-									return callback(err);
-								}
+								return this.callbacks.onCertificateMissing.invoke(this, { info, files })
+									.then((certData) => {										
+										return callback(null, {
+											key: certData.keyFileData,
+											cert: certData.certFileData,
+											hosts: certData.hosts
+										});
+									})
+									.catch((err) => {
+										return callback(err);
+									});
 
-								return callback(null, {
-									key: files.keyFileData,
-									cert: files.certFileData,
-									hosts: files.hosts
-								});
-							});
-						}
-					}]
-				}, undefined, (err, results) => {
-					if (err) {
-						return callback(err);
-					}
-					var hosts;
-					if (results.httpsOptions && results.httpsOptions.hosts && results.httpsOptions.hosts.length) {
-						hosts = results.httpsOptions.hosts;
-						if (hosts.indexOf(hostname) === -1) {
-							hosts.push(hostname);
-						}
-					} else {
-						hosts = [hostname];
-					}
-					delete results.httpsOptions.hosts;
-					if (this.forceSNI && !hostname.match(/^[\d\.]+$/)) {
-						if (!this.silent) {
-							console.log('creating SNI context for ' + hostname);
-						}
-						hosts.forEach((host) => {
-							this.httpsServer.addContext(host, results.httpsOptions);
-							this.sslServers[host] = { port: this.httpsPort };
-						});
-						return callback(null, this.httpsPort);
-					} else {
-						if (!this.silent) {
-							console.log('starting server for ' + hostname);
-						}
-						results.httpsOptions.hosts = hosts;
-						this._createHttpsServer(results.httpsOptions, (port, httpsServer, wssServer) => {
-							if (!this.silent) {
-								console.log('https server started for %s on %s', hostname, port);
+								//return this.onCertificateMissing(info, files, function (err, files) {
+									
+								//	if (err) {
+								//		return callback(err);
+								//	}
+
+								//	return callback(null, {
+								//		key: files.keyFileData,
+								//		cert: files.certFileData,
+								//		hosts: files.hosts
+								//	});
+								//});
 							}
-							var sslServer = {
-								server: httpsServer,
-								wsServer: wssServer,
-								port: port
-							};
+						}]
+					}, undefined, (err, results) => {
+						if (err) {
+							return callback(err);
+						}
+						var hosts;
+						if (results.httpsOptions && results.httpsOptions.hosts && results.httpsOptions.hosts.length) {
+							hosts = results.httpsOptions.hosts;
+							if (hosts.indexOf(hostname) === -1) {
+								hosts.push(hostname);
+							}
+						} else {
+							hosts = [hostname];
+						}
+						delete results.httpsOptions.hosts;
+						if (this.forceSNI && !hostname.match(/^[\d\.]+$/)) {
+							if (!this.silent) {
+								console.log('creating SNI context for ' + hostname);
+							}
 							hosts.forEach((host) => {
-								this.sslServers[hostname] = sslServer;
+								this.httpsServer.addContext(host, results.httpsOptions);
+								this.sslServers[host] = { port: this.httpsPort };
 							});
-							return callback(null, port);
-						});
-					}
+							return callback(null, this.httpsPort);
+						} else {
+							if (!this.silent) {
+								console.log('starting server for ' + hostname);
+							}
+							results.httpsOptions.hosts = hosts;
+							this._createHttpsServer(results.httpsOptions, (port, httpsServer, wssServer) => {
+								if (!this.silent) {
+									console.log('https server started for %s on %s', hostname, port);
+								}
+								var sslServer = {
+									server: httpsServer,
+									wsServer: wssServer,
+									port: port
+								};
+								hosts.forEach((host) => {
+									this.sslServers[hostname] = sslServer;
+								});
+								return callback(null, port);
+							});
+						}
+					});
 				});
-			});
+		
 		}
 
 		/*
@@ -1264,15 +1350,15 @@ export class Proxy {
 	};
 
 
-	public onCertificateRequired(hostname: string, callback: (error: Error | undefined, certDetails: ICertificatePaths) => void) {
-		//var this = this;
-		callback(null, {
-			keyFile: this.sslCaDir + '/keys/' + hostname + '.key',
-			certFile: this.sslCaDir + '/certs/' + hostname + '.pem',
-			hosts: [hostname]
-		});
-		return this;
-	};
+	//public onCertificateRequired(hostname: string, callback: (error: Error | undefined, certDetails: ICertificatePaths) => void) {
+	//	//var this = this;
+	//	callback(null, {
+	//		keyFile: this.sslCaDir + '/keys/' + hostname + '.key',
+	//		certFile: this.sslCaDir + '/certs/' + hostname + '.pem',
+	//		hosts: [hostname]
+	//	});
+	//	return this;
+	//};
 
 	public onCertificateMissing(info: ICertificateMissingHint, files: any, callback: (error: Error | undefined, certDetails: ICertificateData) => void) {
 		var hosts = files.hosts || [info.hostname];
@@ -1483,18 +1569,21 @@ export class Proxy {
 							//ctx.proxyToServerRequest.on('error', handleProxyToServerRequestError.bind(this, 'PROXY_TO_SERVER_REQUEST_ERROR', ctx));
 							ctx.proxyToServerRequest.on("error", (err) => {
 								//handleProxyToServerRequestError() logic
-								return this.callbacks.onProxyToUpstreamRequestError.invoke(ctx.proxyToServerRequest,{ctx, err })
+								return this.callbacks.onProxyToUpstreamRequestError.invoke(ctx.proxyToServerRequest, { ctx, err })
 									.then((onUpstreamErrorResults) => {
-										if (onUpstreamErrorResults.retry === true) {
+										if (onUpstreamErrorResults != null && onUpstreamErrorResults.retry === true) {
 											//retry logic
 											ctx.proxyToServerRequest.abort();
 											return callOnRequestHandlersThenMakeProxyRequest();
 										} else {
-											//failure logic
-											this.callbacks.onError.invoke(this, { err, errorKind: "PROXY_TO_SERVER_REQUEST_ERROR", ctx, });
-											return Promise.reject(err);
+											//throw failure so we abort the request
+											return Promise.reject(new xlib.exception.Exception("onProxyToUpstreamRequestError with no retry", { innerException: err }));
 										}
-									})
+									}).catch((err) => {
+										//failure logic
+										this.callbacks.onError.invoke(this, { err, errorKind: "PROXY_TO_SERVER_REQUEST_ERROR", ctx, });
+										//return Promise.reject(err);  //dont error otherwise it's unhandled.
+									});
 							});
 
 
@@ -1596,7 +1685,7 @@ export class Proxy {
 				const proxyToServerRequestComplete = (serverToProxyResponse: http.IncomingMessage) => {
 					//serverToProxyResponse.on('error', ctx._onError.bind(ctx, 'SERVER_TO_PROXY_RESPONSE_ERROR', ctx));
 					serverToProxyResponse.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "SERVER_TO_PROXY_RESPONSE_ERROR", ctx }); });
-
+					console.warn("ctx.serverToProxyResponse.pause();");
 					serverToProxyResponse.pause();
 					ctx.serverToProxyResponse = serverToProxyResponse;
 
@@ -1672,6 +1761,7 @@ export class Proxy {
 										filter.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "RESPONSE_FILTER_ERROR", ctx }); });
 										prevResponsePipeElem = prevResponsePipeElem.pipe(filter);
 									});
+									console.warn("ctx.serverToProxyResponse.resume();");
 									return ctx.serverToProxyResponse.resume();
 								})
 						})
@@ -1707,7 +1797,7 @@ class ProxyFinalRequestFilter extends events.EventEmitter {
 		//		return this.ctx.proxyToServerRequest.write(chunk);
 		//	}
 		//});
-
+		console.warn("ProxyFinalRequestFilter.write");
 		this.proxy.callbacks.onRequestData.invoke(this.proxy, { ctx: this.ctx, chunk })
 			.then((args) => {
 
@@ -1726,8 +1816,11 @@ class ProxyFinalRequestFilter extends events.EventEmitter {
 
 
 	public end(chunk) {
+
+		
 		//const this = this;
 		if (chunk) {
+			console.warn("ProxyFinalRequestFilter.end.write");
 			//return this.ctx._onRequestData(this.ctx, chunk, (err, chunk) => {
 			//	if (err) {
 			//		//return this.ctx._onError('ON_REQUEST_DATA_ERROR', this.ctx, err);
@@ -1761,6 +1854,7 @@ class ProxyFinalRequestFilter extends events.EventEmitter {
 
 
 		} else {
+			console.warn("ProxyFinalRequestFilter.end.end");
 			//return this.ctx._onRequestEnd(this.ctx, (err) => {
 			//	if (err) {
 			//		//return this.ctx._onError('ON_REQUEST_END_ERROR', this.ctx, err);
@@ -1792,6 +1886,8 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 		this.writable = true;
 	}
 	public write(chunk) {
+		
+		console.warn("ProxyFinalResponseFilter.write");
 		////const this = this;
 		//this.ctx._onResponseData(this.ctx, chunk, (err, chunk) => {
 		//	if (err) {
@@ -1808,13 +1904,14 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 			.then((args) => {
 
 				if (args.chunk) {
+					console.warn("ProxyFinalResponseFilter.write.actualWrite");
 					return args.ctx.proxyToClientResponse.write(args.chunk);
 				}
 			})
 			.catch((err) => {
 				this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_DATA_ERROR", ctx: this.ctx, });
 				return Promise.reject(err);
-			})
+			});
 
 
 		return true;
@@ -1823,6 +1920,7 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 	public end(chunk) {
 		//const this = this;
 		if (chunk) {
+			console.warn("ProxyFinalResponseFilter.end.write");
 			//return this.ctx._onResponseData(this.ctx, chunk, (err, chunk) => {
 			//	if (err) {
 			//		//return this.ctx._onError('ON_RESPONSE_DATA_ERROR', this.ctx, err);
@@ -1845,6 +1943,7 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 				.then((args) => {
 					return this.proxy.callbacks.onResponseEnd.invoke(this.proxy, { ctx: this.ctx })
 						.then((args) => {
+							console.warn("ProxyFinalResponseFilter.end.write.actualEnd");
 							return this.ctx.proxyToClientResponse.end(chunk);
 						})
 				})
@@ -1856,6 +1955,8 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 
 
 		} else {
+
+			console.warn("ProxyFinalResponseFilter.end.end");
 			//return this.ctx._onResponseEnd(this.ctx, (err) => {
 			//	if (err) {
 			//		//return this.ctx._onError('ON_RESPONSE_END_ERROR', this.ctx, err);
@@ -1866,6 +1967,7 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 			//});
 			return this.proxy.callbacks.onResponseEnd.invoke(this.proxy, { ctx: this.ctx })
 				.then((args) => {
+					console.warn("ProxyFinalResponseFilter.end.end.actualEnd");
 					return this.ctx.proxyToClientResponse.end();
 				}).catch((err) => {
 					this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_END_ERROR", ctx: this.ctx, });
@@ -1884,7 +1986,8 @@ module utils {
 
 	export function closeClientRequestWithError(ctx: IContext, err: Error, errorKind: string) {
 
-		log.error("utils.closeClientRequestWithError() triggered.  If ctx exists, will close with 504 error.", { errorKind, err });
+		
+		log.error("utils.closeClientRequestWithError() triggered.  If ctx exists, will close with 504 error.", { errorKind, err }, err);
 		if (ctx != null) {
 			if (ctx.proxyToClientResponse && !ctx.proxyToClientResponse.headersSent) {
 				ctx.proxyToClientResponse.writeHead(504, 'Proxy Error');
@@ -1898,7 +2001,10 @@ module utils {
 			}
 		}
 
-		log.assert(false, "also abort other active connections, like serverToProxyRequest/Response");
+		log.warn("also abort other active connections, like serverToProxyRequest/Response");
+		log.warn("also abort other active connections, like serverToProxyRequest/Response");
+		log.warn("also abort other active connections, like serverToProxyRequest/Response");
+		log.warn("also abort other active connections, like serverToProxyRequest/Response");
 	}
 	export function parseHostAndPort(req: http.IncomingMessage, defaultPort?: number) {
 		var host = req.headers.host;

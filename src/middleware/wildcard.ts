@@ -1,4 +1,6 @@
 'use strict';
+import xlib = require("xlib");
+import Promise = xlib.promise.bluebird;
 
 /**
  * group1: subdomain
@@ -8,12 +10,12 @@
 const HOSTNAME_REGEX = /^(.+)(\.[^\.]{4,}(\.[^\.]{1,3})*\.[^\.]+)$/;
 
 module.exports = {
-  onCertificateRequired: function (hostname, callback) {
+  onCertificateRequired: function (hostname):Promise<any> {
     var rootHost = hostname;
     if (HOSTNAME_REGEX.test(hostname)) {
     	rootHost = hostname.replace(/^[^\.]+\./, '');
     }
-    return callback(null, {
+    return Promise.resolve({
       keyFile: this.sslCaDir + '/keys/_.' + rootHost + '.key',
       certFile: this.sslCaDir + '/certs/_.' + rootHost + '.pem',
       hosts: ['*.' + rootHost, rootHost]
