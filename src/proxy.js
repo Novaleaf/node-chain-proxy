@@ -1095,6 +1095,27 @@ var Proxy = (function () {
                         });
                         console.warn("ctx.serverToProxyResponse.resume();");
                         return ctx.serverToProxyResponse.resume();
+                        //////   below is a rewrite of the above, but seems unnessicary, and probably doesn't work right with big responses?
+                        //console.warn("WTFFFFFFFFFFFFFF?????");
+                        //return Promise.each(ctx.responseFilters, (filter) => {
+                        //	console.warn("ProxyFinalResponseFilter about to enumerate");
+                        //	return new Promise((resolve, reject) => {
+                        //		console.warn("ProxyFinalResponseFilter START");
+                        //		filter.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "RESPONSE_FILTER_ERROR", ctx }); reject(); });
+                        //		filter.on("finish", () => {
+                        //			console.warn("ProxyFinalResponseFilter filter.on.finish!");
+                        //			resolve();
+                        //		});
+                        //		filter.on("end", () => {
+                        //			console.warn("ProxyFinalResponseFilter filter.on.end!");
+                        //			resolve();
+                        //		});
+                        //		prevResponsePipeElem = prevResponsePipeElem.pipe(filter as any);
+                        //	});
+                        //}).finally(() => {
+                        //	console.warn("ProxyFinalResponseFilter DONE AND RESUME!");
+                        //	ctx.serverToProxyResponse.resume();
+                        //});
                     });
                 });
             };
@@ -1110,6 +1131,7 @@ var ProxyFinalRequestFilter = (function (_super) {
         var _this = _super.call(this) || this;
         _this.proxy = proxy;
         _this.ctx = ctx;
+        _this.currentExecution = Promise.resolve();
         events.EventEmitter.call(_this);
         _this.writable = true;
         return _this;
@@ -1127,70 +1149,76 @@ var ProxyFinalRequestFilter = (function (_super) {
         //		return this.ctx.proxyToServerRequest.write(chunk);
         //	}
         //});
-        console.warn("ProxyFinalRequestFilter.write");
-        this.proxy.callbacks.onRequestData.invoke(this.proxy, { ctx: this.ctx, chunk: chunk })
-            .then(function (args) {
-            if (args.chunk) {
-                return args.ctx.proxyToServerRequest.write(args.chunk);
-            }
-        })
-            .catch(function (err) {
-            _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_REQUEST_DATA_ERROR", ctx: _this.ctx, });
-            return Promise.reject(err);
+        console.warn("ProxyFinalRequestFilter.write.attachPromise");
+        this.currentExecution = this.currentExecution.finally(function () {
+            console.warn("ProxyFinalRequestFilter.write");
+            return _this.proxy.callbacks.onRequestData.invoke(_this.proxy, { ctx: _this.ctx, chunk: chunk })
+                .then(function (args) {
+                if (args.chunk) {
+                    return args.ctx.proxyToServerRequest.write(args.chunk);
+                }
+            })
+                .catch(function (err) {
+                _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_REQUEST_DATA_ERROR", ctx: _this.ctx, });
+                return Promise.reject(err);
+            });
         });
         return true;
     };
     ;
     ProxyFinalRequestFilter.prototype.end = function (chunk) {
         var _this = this;
-        //const this = this;
-        if (chunk) {
-            console.warn("ProxyFinalRequestFilter.end.write");
-            //return this.ctx._onRequestData(this.ctx, chunk, (err, chunk) => {
-            //	if (err) {
-            //		//return this.ctx._onError('ON_REQUEST_DATA_ERROR', this.ctx, err);
-            //		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_DATA_ERROR", ctx: this.ctx, });
-            //		return Promise.reject(err);
-            //	}
-            //	return this.ctx._onRequestEnd(this.ctx, (err) => {
-            //		if (err) {
-            //			//return this.ctx._onError('ON_REQUEST_END_ERROR', this.ctx, err);
-            //			this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
-            //			return Promise.reject(err);
-            //		}
-            //		return this.ctx.proxyToServerRequest.end(chunk);
-            //	});
-            //});
-            return this.proxy.callbacks.onRequestData.invoke(this.proxy, { ctx: this.ctx, chunk: chunk })
-                .then(function (args) {
+        console.warn("ProxyFinalRequestFilter.end.attachPromise");
+        this.currentExecution = this.currentExecution.finally(function () {
+            //const this = this;
+            if (chunk) {
+                console.warn("ProxyFinalRequestFilter.end.write");
+                //return this.ctx._onRequestData(this.ctx, chunk, (err, chunk) => {
+                //	if (err) {
+                //		//return this.ctx._onError('ON_REQUEST_DATA_ERROR', this.ctx, err);
+                //		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_DATA_ERROR", ctx: this.ctx, });
+                //		return Promise.reject(err);
+                //	}
+                //	return this.ctx._onRequestEnd(this.ctx, (err) => {
+                //		if (err) {
+                //			//return this.ctx._onError('ON_REQUEST_END_ERROR', this.ctx, err);
+                //			this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
+                //			return Promise.reject(err);
+                //		}
+                //		return this.ctx.proxyToServerRequest.end(chunk);
+                //	});
+                //});
+                return _this.proxy.callbacks.onRequestData.invoke(_this.proxy, { ctx: _this.ctx, chunk: chunk })
+                    .then(function (args) {
+                    return _this.proxy.callbacks.onRequestEnd.invoke(_this.proxy, { ctx: _this.ctx })
+                        .then(function (args) {
+                        return _this.ctx.proxyToServerRequest.end(chunk);
+                    });
+                })
+                    .catch(function (err) {
+                    _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_REQUEST_END_ERROR", ctx: _this.ctx, });
+                    return Promise.reject(err);
+                });
+            }
+            else {
+                console.warn("ProxyFinalRequestFilter.end.end");
+                //return this.ctx._onRequestEnd(this.ctx, (err) => {
+                //	if (err) {
+                //		//return this.ctx._onError('ON_REQUEST_END_ERROR', this.ctx, err);
+                //		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
+                //		return Promise.reject(err);
+                //	}
+                //	return this.ctx.proxyToServerRequest.end(chunk || undefined);
+                //});
                 return _this.proxy.callbacks.onRequestEnd.invoke(_this.proxy, { ctx: _this.ctx })
                     .then(function (args) {
-                    return _this.ctx.proxyToServerRequest.end(chunk);
+                    return _this.ctx.proxyToServerRequest.end();
+                }).catch(function (err) {
+                    _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_REQUEST_END_ERROR", ctx: _this.ctx, });
+                    return Promise.reject(err);
                 });
-            })
-                .catch(function (err) {
-                _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_REQUEST_END_ERROR", ctx: _this.ctx, });
-                return Promise.reject(err);
-            });
-        }
-        else {
-            console.warn("ProxyFinalRequestFilter.end.end");
-            //return this.ctx._onRequestEnd(this.ctx, (err) => {
-            //	if (err) {
-            //		//return this.ctx._onError('ON_REQUEST_END_ERROR', this.ctx, err);
-            //		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
-            //		return Promise.reject(err);
-            //	}
-            //	return this.ctx.proxyToServerRequest.end(chunk || undefined);
-            //});
-            return this.proxy.callbacks.onRequestEnd.invoke(this.proxy, { ctx: this.ctx })
-                .then(function (args) {
-                return _this.ctx.proxyToServerRequest.end();
-            }).catch(function (err) {
-                _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_REQUEST_END_ERROR", ctx: _this.ctx, });
-                return Promise.reject(err);
-            });
-        }
+            }
+        });
     };
     ;
     return ProxyFinalRequestFilter;
@@ -1201,90 +1229,98 @@ var ProxyFinalResponseFilter = (function (_super) {
         var _this = _super.call(this) || this;
         _this.proxy = proxy;
         _this.ctx = ctx;
+        /** acts as a semaphore, restricting execution to 1 code path at a time */
+        _this.currentExecution = Promise.resolve();
         events.EventEmitter.call(_this);
         _this.writable = true;
         return _this;
     }
     ProxyFinalResponseFilter.prototype.write = function (chunk) {
         var _this = this;
-        console.warn("ProxyFinalResponseFilter.write");
-        ////const this = this;
-        //this.ctx._onResponseData(this.ctx, chunk, (err, chunk) => {
-        //	if (err) {
-        //		//return this.ctx._onError('ON_RESPONSE_DATA_ERROR', this.ctx, err);
-        //		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_DATA_ERROR", ctx: this.ctx, });
-        //		return Promise.reject(err);
-        //	}
-        //	if (chunk) {
-        //		return this.ctx.proxyToClientResponse.write(chunk);
-        //	}
-        //});
-        this.proxy.callbacks.onResponseData.invoke(this.proxy, { ctx: this.ctx, chunk: chunk })
-            .then(function (args) {
-            if (args.chunk) {
-                console.warn("ProxyFinalResponseFilter.write.actualWrite");
-                return args.ctx.proxyToClientResponse.write(args.chunk);
-            }
-        })
-            .catch(function (err) {
-            _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_DATA_ERROR", ctx: _this.ctx, });
-            return Promise.reject(err);
-        });
-        return true;
-    };
-    ;
-    ProxyFinalResponseFilter.prototype.end = function (chunk) {
-        var _this = this;
-        //const this = this;
-        if (chunk) {
-            console.warn("ProxyFinalResponseFilter.end.write");
-            //return this.ctx._onResponseData(this.ctx, chunk, (err, chunk) => {
+        console.warn("ProxyFinalResponseFilter.write.attachPromise");
+        this.currentExecution = this.currentExecution.then(function () {
+            console.warn("ProxyFinalResponseFilter.write");
+            ////const this = this;
+            //this.ctx._onResponseData(this.ctx, chunk, (err, chunk) => {
             //	if (err) {
             //		//return this.ctx._onError('ON_RESPONSE_DATA_ERROR', this.ctx, err);
             //		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_DATA_ERROR", ctx: this.ctx, });
             //		return Promise.reject(err);
             //	}
-            //	return this.ctx._onResponseEnd(this.ctx, (err) => {
-            //		if (err) {
-            //			//return this.ctx._onError('ON_RESPONSE_END_ERROR', this.ctx, err);
-            //			this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_END_ERROR", ctx: this.ctx, });
-            //			return Promise.reject(err);
-            //		}
-            //		return this.ctx.proxyToClientResponse.end(chunk || undefined);
-            //	});
+            //	if (chunk) {
+            //		return this.ctx.proxyToClientResponse.write(chunk);
+            //	}
             //});
-            return this.proxy.callbacks.onResponseData.invoke(this.proxy, { ctx: this.ctx, chunk: chunk })
+            return _this.proxy.callbacks.onResponseData.invoke(_this.proxy, { ctx: _this.ctx, chunk: chunk })
                 .then(function (args) {
-                return _this.proxy.callbacks.onResponseEnd.invoke(_this.proxy, { ctx: _this.ctx })
-                    .then(function (args) {
-                    console.warn("ProxyFinalResponseFilter.end.write.actualEnd");
-                    return _this.ctx.proxyToClientResponse.end(chunk);
-                });
+                if (args.chunk) {
+                    console.warn("ProxyFinalResponseFilter.write.actualWrite");
+                    return args.ctx.proxyToClientResponse.write(args.chunk);
+                }
             })
                 .catch(function (err) {
-                _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_END_ERROR", ctx: _this.ctx, });
+                _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_DATA_ERROR", ctx: _this.ctx, });
                 return Promise.reject(err);
             });
-        }
-        else {
-            console.warn("ProxyFinalResponseFilter.end.end");
-            //return this.ctx._onResponseEnd(this.ctx, (err) => {
-            //	if (err) {
-            //		//return this.ctx._onError('ON_RESPONSE_END_ERROR', this.ctx, err);
-            //		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_END_ERROR", ctx: this.ctx, });
-            //		return Promise.reject(err);
-            //	}
-            //	return this.ctx.proxyToClientResponse.end(chunk || undefined);
-            //});
-            return this.proxy.callbacks.onResponseEnd.invoke(this.proxy, { ctx: this.ctx })
-                .then(function (args) {
-                console.warn("ProxyFinalResponseFilter.end.end.actualEnd");
-                return _this.ctx.proxyToClientResponse.end();
-            }).catch(function (err) {
-                _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_END_ERROR", ctx: _this.ctx, });
-                return Promise.reject(err);
-            });
-        }
+        });
+        return true;
+    };
+    ;
+    ProxyFinalResponseFilter.prototype.end = function (chunk) {
+        //const this = this;
+        var _this = this;
+        console.warn("ProxyFinalResponseFilter.end.attachPromise");
+        this.currentExecution = this.currentExecution.then(function () {
+            if (chunk) {
+                console.warn("ProxyFinalResponseFilter.end.write");
+                //return this.ctx._onResponseData(this.ctx, chunk, (err, chunk) => {
+                //	if (err) {
+                //		//return this.ctx._onError('ON_RESPONSE_DATA_ERROR', this.ctx, err);
+                //		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_DATA_ERROR", ctx: this.ctx, });
+                //		return Promise.reject(err);
+                //	}
+                //	return this.ctx._onResponseEnd(this.ctx, (err) => {
+                //		if (err) {
+                //			//return this.ctx._onError('ON_RESPONSE_END_ERROR', this.ctx, err);
+                //			this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_END_ERROR", ctx: this.ctx, });
+                //			return Promise.reject(err);
+                //		}
+                //		return this.ctx.proxyToClientResponse.end(chunk || undefined);
+                //	});
+                //});
+                return _this.proxy.callbacks.onResponseData.invoke(_this.proxy, { ctx: _this.ctx, chunk: chunk })
+                    .then(function (args) {
+                    return _this.proxy.callbacks.onResponseEnd.invoke(_this.proxy, { ctx: _this.ctx })
+                        .then(function (args) {
+                        console.warn("ProxyFinalResponseFilter.end.write.actualEnd");
+                        return _this.ctx.proxyToClientResponse.end(chunk);
+                    });
+                })
+                    .catch(function (err) {
+                    _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_END_ERROR", ctx: _this.ctx, });
+                    return Promise.reject(err);
+                });
+            }
+            else {
+                console.warn("ProxyFinalResponseFilter.end.end");
+                //return this.ctx._onResponseEnd(this.ctx, (err) => {
+                //	if (err) {
+                //		//return this.ctx._onError('ON_RESPONSE_END_ERROR', this.ctx, err);
+                //		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_END_ERROR", ctx: this.ctx, });
+                //		return Promise.reject(err);
+                //	}
+                //	return this.ctx.proxyToClientResponse.end(chunk || undefined);
+                //});
+                return _this.proxy.callbacks.onResponseEnd.invoke(_this.proxy, { ctx: _this.ctx })
+                    .then(function (args) {
+                    console.warn("ProxyFinalResponseFilter.end.end.actualEnd");
+                    return _this.ctx.proxyToClientResponse.end();
+                }).catch(function (err) {
+                    _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_END_ERROR", ctx: _this.ctx, });
+                    return Promise.reject(err);
+                });
+            }
+        });
     };
     ;
     return ProxyFinalResponseFilter;
