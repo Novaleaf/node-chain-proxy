@@ -1073,7 +1073,7 @@ export class Proxy {
 		//httpsServer.on('clientError', this._onError.bind(this, 'HTTPS_CLIENT_ERROR'));
 		httpsServer.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "proxy.httpsServer.on('clientError')" }); });
 		//httpsServer.on('connect', this._onHttpServerConnect.bind(this));
-		this.httpServer.on("connect", (req: http.IncomingMessage, socket: net.Socket, head: Buffer, otherArg: any) => {
+		httpsServer.on("connect", (req: http.IncomingMessage, socket: net.Socket, head: Buffer, otherArg: any) => {
 			this._onHttpServerConnect({ req, socket, head, otherArg, isSsl: true });
 		})
 		httpsServer.on('request', this._onHttpServerRequest.bind(this, true));
@@ -1130,6 +1130,10 @@ export class Proxy {
 
 
 	private _onHttpServerConnect(args: { req: http.IncomingMessage; socket: net.Socket; head: Buffer; isSsl: boolean; otherArg: any; }) {
+
+
+		log.warn("_onHttpServerConnect ", args.req.url);
+
 		////var this = this;
 
 		//// you can forward HTTPS request directly by adding custom CONNECT method handler
@@ -1188,7 +1192,7 @@ export class Proxy {
 
 	private _onHttpServerConnectData(req, socket, head) {
 		//var this = this;
-
+		log.warn("_onHttpServerConnectData about to pause socket", req.url);
 		socket.pause();
 
 

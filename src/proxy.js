@@ -470,7 +470,7 @@ var Proxy = (function () {
         //httpsServer.on('clientError', this._onError.bind(this, 'HTTPS_CLIENT_ERROR'));
         httpsServer.on("error", function (err) { _this.callbacks.onError.invoke(_this, { err: err, errorKind: "proxy.httpsServer.on('clientError')" }); });
         //httpsServer.on('connect', this._onHttpServerConnect.bind(this));
-        this.httpServer.on("connect", function (req, socket, head, otherArg) {
+        httpsServer.on("connect", function (req, socket, head, otherArg) {
             _this._onHttpServerConnect({ req: req, socket: socket, head: head, otherArg: otherArg, isSsl: true });
         });
         httpsServer.on('request', this._onHttpServerRequest.bind(this, true));
@@ -524,8 +524,9 @@ var Proxy = (function () {
     //	return this;
     //};
     Proxy.prototype._onHttpServerConnect = function (args) {
-        ////var this = this;
         var _this = this;
+        log.warn("_onHttpServerConnect ", args.req.url);
+        ////var this = this;
         //// you can forward HTTPS request directly by adding custom CONNECT method handler
         //return async.forEach(this.onConnectHandlers, (fn: Function, callback) => {
         //	return fn.call(this, req, socket, head, callback)
@@ -578,8 +579,9 @@ var Proxy = (function () {
         });
     };
     Proxy.prototype._onHttpServerConnectData = function (req, socket, head) {
-        //var this = this;
         var _this = this;
+        //var this = this;
+        log.warn("_onHttpServerConnectData about to pause socket", req.url);
         socket.pause();
         var makeConnection = function (port) {
             log.warn("about to makeConnection (net.connect and bind error and then tunnel)");
