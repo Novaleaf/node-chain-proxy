@@ -37,7 +37,8 @@ var middleware;
 invoker gets the final args transformed by all callbacks.
  */
 var EventBroadcastPipe = (function () {
-    function EventBroadcastPipe() {
+    function EventBroadcastPipe(name) {
+        this.name = name;
         this._storage = [];
     }
     EventBroadcastPipe.prototype.subscribe = function (callback) {
@@ -54,21 +55,26 @@ var EventBroadcastPipe = (function () {
      */
     EventBroadcastPipe.prototype.invoke = function (sender, initialArgs) {
         var _this = this;
-        var _looper = function (index, currentArgs) {
-            return _this._storage[index](sender, currentArgs)
-                .then(function (resultingArgs) {
-                if (index === _this._storage.length - 1) {
-                    return Promise.resolve(resultingArgs);
-                }
-                else {
-                    return _looper(index + 1, resultingArgs);
-                }
-            });
-        };
-        if (this._storage.length === 0) {
-            return Promise.resolve(initialArgs);
-        }
-        return _looper(0, initialArgs);
+        log.debug("start invoking " + xlib.reflection.getTypeName(this) + " " + this.name);
+        return Promise.try(function () {
+            var _looper = function (index, currentArgs) {
+                return _this._storage[index](sender, currentArgs)
+                    .then(function (resultingArgs) {
+                    if (index === _this._storage.length - 1) {
+                        return Promise.resolve(resultingArgs);
+                    }
+                    else {
+                        return _looper(index + 1, resultingArgs);
+                    }
+                });
+            };
+            if (_this._storage.length === 0) {
+                return Promise.resolve(initialArgs);
+            }
+            return _looper(0, initialArgs);
+        }).finally(function () {
+            log.debug("finish invoking " + xlib.reflection.getTypeName(_this) + " " + _this.name);
+        });
     };
     return EventBroadcastPipe;
 }());
@@ -79,7 +85,8 @@ exports.EventBroadcastPipe = EventBroadcastPipe;
     otherwise (in the case of a failure) the next callback is tried.
  */
 var EventBroadcastLimited = (function () {
-    function EventBroadcastLimited() {
+    function EventBroadcastLimited(name) {
+        this.name = name;
         this._storage = [];
     }
     EventBroadcastLimited.prototype.subscribe = function (callback) {
@@ -97,19 +104,24 @@ var EventBroadcastLimited = (function () {
      */
     EventBroadcastLimited.prototype.invoke = function (sender, args) {
         var _this = this;
-        var _looper = function (index) {
-            return _this._storage[index](sender, args)
-                .catch(function (err) {
-                if (index === _this._storage.length - 1) {
-                    return Promise.reject(err);
-                }
-                return _looper(index + 1);
-            });
-        };
-        if (this._storage.length === 0) {
-            return Promise.resolve(undefined);
-        }
-        return _looper(0);
+        log.debug("start invoking " + xlib.reflection.getTypeName(this) + " " + this.name);
+        return Promise.try(function () {
+            var _looper = function (index) {
+                return _this._storage[index](sender, args)
+                    .catch(function (err) {
+                    if (index === _this._storage.length - 1) {
+                        return Promise.reject(err);
+                    }
+                    return _looper(index + 1);
+                });
+            };
+            if (_this._storage.length === 0) {
+                return Promise.resolve(undefined);
+            }
+            return _looper(0);
+        }).finally(function () {
+            log.debug("finish invoking " + xlib.reflection.getTypeName(_this) + " " + _this.name);
+        });
     };
     return EventBroadcastLimited;
 }());
@@ -119,7 +131,8 @@ exports.EventBroadcastLimited = EventBroadcastLimited;
  *
  */
 var EventBroadcast = (function () {
-    function EventBroadcast() {
+    function EventBroadcast(name) {
+        this.name = name;
         this._storage = [];
     }
     EventBroadcast.prototype.subscribe = function (callback) {
@@ -135,13 +148,19 @@ var EventBroadcast = (function () {
      * @param args
      */
     EventBroadcast.prototype.invoke = function (sender, args) {
-        var results = [];
-        this._storage.forEach(function (callback) {
-            var result = callback(sender, args);
-            results.push(result);
+        var _this = this;
+        log.debug("start invoking " + xlib.reflection.getTypeName(this) + " " + this.name);
+        return Promise.try(function () {
+            var results = [];
+            _this._storage.forEach(function (callback) {
+                var result = callback(sender, args);
+                results.push(result);
+            });
+            var toReturn = Promise.all(results);
+            return toReturn;
+        }).finally(function () {
+            log.debug("finish invoking " + xlib.reflection.getTypeName(_this) + " " + _this.name);
         });
-        var toReturn = Promise.all(results);
-        return toReturn;
     };
     return EventBroadcast;
 }());
@@ -150,7 +169,8 @@ exports.EventBroadcast = EventBroadcast;
  *  a one-directional event subscription system.  (subscribers don't impact invoker in any way)
  */
 var ActionBroadcast = (function () {
-    function ActionBroadcast() {
+    function ActionBroadcast(name) {
+        this.name = name;
         this._storage = [];
     }
     ActionBroadcast.prototype.subscribe = function (callback) {
@@ -165,9 +185,11 @@ var ActionBroadcast = (function () {
      * @param args
      */
     ActionBroadcast.prototype.invoke = function (sender, args) {
+        log.debug("start invoking " + xlib.reflection.getTypeName(this) + " " + this.name);
         _.forEachRight(this._storage, function (callback) {
             callback(sender, args);
         });
+        log.debug("finish invoking " + xlib.reflection.getTypeName(this) + " " + this.name);
     };
     return ActionBroadcast;
 }());
@@ -175,32 +197,32 @@ exports.ActionBroadcast = ActionBroadcast;
 var ProxyCallbacks = (function () {
     function ProxyCallbacks() {
         /** do not throw errors (or reject promises) from subscriber callbacks here, or it will disrupt internal proxy handling logic (see ```proxy.ctor.defaultCallbacks``` for details) */
-        this.onError = new ActionBroadcast();
+        this.onError = new ActionBroadcast("onError");
         /** triggered when the context is created, before any other context specific events are triggered.
     check ctx.url.protocol to decide what events to bind.  http, https, or ws */
-        this.onContextInitialize = new EventBroadcast();
-        this.onWebSocketConnection = new EventBroadcast();
-        this.onWebSocketFrame = new EventBroadcastPipe();
-        this.onWebSocketSend = new EventBroadcastPipe();
-        this.onWebSocketMessage = new EventBroadcastPipe();
+        this.onContextInitialize = new EventBroadcast("onContextInitialize");
+        this.onWebSocketConnection = new EventBroadcast("onWebSocketConnection");
+        this.onWebSocketFrame = new EventBroadcastPipe("onWebSocketFrame");
+        this.onWebSocketSend = new EventBroadcastPipe("onWebSocketSend");
+        this.onWebSocketMessage = new EventBroadcastPipe("onWebSocketMessage");
         /** do not throw errors (or reject promises) from subscriber callbacks here, or it will disrupt internal proxy handling logic (see ```proxy.ctor.defaultCallbacks``` for details) */
-        this.onWebSocketClose = new EventBroadcastPipe();
-        this.onWebSocketError = new ActionBroadcast();
-        this.onRequest = new EventBroadcast();
-        this.onRequestHeaders = new EventBroadcast();
-        this.onRequestData = new EventBroadcastPipe();
-        this.onRequestEnd = new EventBroadcast();
+        this.onWebSocketClose = new EventBroadcastPipe("onWebSocketClose");
+        this.onWebSocketError = new ActionBroadcast("onWebSocketError");
+        this.onRequest = new EventBroadcast("onRequest");
+        this.onRequestHeaders = new EventBroadcast("onRequestHeaders");
+        this.onRequestData = new EventBroadcastPipe("onRequestData");
+        this.onRequestEnd = new EventBroadcast("onRequestEnd");
         /** callback triggered by the ctx.proxyToServerRequest request when it's complete.   response is stored as ctx.serverToProxyResponse. */
-        this.onResponse = new EventBroadcast();
-        this.onResponseHeaders = new EventBroadcast();
-        this.onResponseData = new EventBroadcastPipe();
-        this.onResponseEnd = new EventBroadcast();
+        this.onResponse = new EventBroadcast("onResponse");
+        this.onResponseHeaders = new EventBroadcast("onResponseHeaders");
+        this.onResponseData = new EventBroadcastPipe("onResponseData");
+        this.onResponseEnd = new EventBroadcast("onResponseEnd");
         /** allows retrying the request to upstream if desired (via the returned promise results), if so, the callbacks from ```onRequest``` onward will be retried.  */
-        this.onProxyToUpstreamRequestError = new EventBroadcastLimited();
+        this.onProxyToUpstreamRequestError = new EventBroadcastLimited("onProxyToUpstreamRequestError");
         //proxy specific callbacks
-        this.onConnect = new EventBroadcast();
-        this.onCertificateRequired = new EventBroadcastLimited();
-        this.onCertificateMissing = new EventBroadcastLimited();
+        this.onConnect = new EventBroadcast("onConnect");
+        this.onCertificateRequired = new EventBroadcastLimited("onCertificateRequired");
+        this.onCertificateMissing = new EventBroadcastLimited("onCertificateMissing");
     }
     return ProxyCallbacks;
 }());
@@ -373,7 +395,7 @@ var Proxy = (function () {
         //attach all callbacks from mod to our masterDispatcher
         _.forOwn(mod, function (dispatcher, key) {
             _.forEach(dispatcher._storage, function (callback) {
-                log.info("attaching mod." + key + " to proxy._masterModDispatcher.  callback=", callback);
+                log.info("attaching mod." + key + " to proxy._masterModDispatcher."); //  callback=`, dispatcher.);
                 _this.callbacks[key].subscribe(callback);
             });
         });
@@ -535,10 +557,10 @@ var Proxy = (function () {
             // we need first byte of data to detect if request is SSL encrypted
             if (!head || head.length === 0) {
                 socket.once('data', _this._onHttpServerConnectData.bind(_this, req, socket));
-                socket.on("data", function (req, socket) {
-                    //JASONS HACK: test listening to https socket
-                    log.warn("socket.on.data", { req: req, socket: socket });
-                });
+                //socket.on("data", (req, socket) => {
+                //	//JASONS HACK: test listening to https socket
+                //	log.warn("socket.on.data...");//, { req, socket });
+                //})
                 socket.write('HTTP/1.1 200 OK\r\n');
                 if (_this.keepAlive && req.headers['proxy-connection'] === 'keep-alive') {
                     socket.write('Proxy-Connection: keep-alive\r\n');
@@ -560,8 +582,10 @@ var Proxy = (function () {
         var _this = this;
         socket.pause();
         var makeConnection = function (port) {
+            log.warn("about to makeConnection (net.connect and bind error and then tunnel)");
             // open a TCP connection to the remote host
             var conn = net.connect(port, function () {
+                log.warn("net.connect made, about to tunnel", req.url); //{ port, conn, socket , req, head});
                 // create a tunnel between the two hosts
                 socket.pipe(conn);
                 conn.pipe(socket);
@@ -575,6 +599,7 @@ var Proxy = (function () {
             //this.onCertificateRequired(hostname, (err, files) => {
             return _this.callbacks.onCertificateRequired.invoke(_this, { hostname: hostname })
                 .then(function (files) {
+                log.warn("looking for https server for ", files);
                 async.auto({
                     'keyFileExists': function (callback) {
                         return fs.exists(files.keyFile, function (exists) {
@@ -715,6 +740,7 @@ var Proxy = (function () {
                     return makeConnection(_this.sslServers[hostname].port);
                 }
                 getHttpsServer(hostname, function (err, port) {
+                    log.warn("got port for https server, about to make connection", { err: err, port: port });
                     process.nextTick(sem.leave.bind(sem));
                     if (err) {
                         //return this._onError('OPEN_HTTPS_SERVER_ERROR', err);
@@ -725,6 +751,7 @@ var Proxy = (function () {
             });
         }
         else {
+            log.warn("about to make connection for http server", { port: this.httpPort });
             return makeConnection(this.httpPort);
         }
     };

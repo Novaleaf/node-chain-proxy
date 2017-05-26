@@ -51,6 +51,7 @@ invoker gets the final args transformed by all callbacks.
  */
 export class EventBroadcastPipe<TSender, TArgs>{
 
+	constructor(public name: string) { }
 
 	public _storage: ((sender: TSender, args: TArgs) => Promise<TArgs>)[] = [];
 	public subscribe(callback: ((sender: TSender, args: TArgs) => Promise<TArgs>)) {
@@ -67,21 +68,27 @@ export class EventBroadcastPipe<TSender, TArgs>{
 	 * @param args
 	 */
 	public invoke(sender: TSender, initialArgs: TArgs): Promise<TArgs> {
-		const _looper = (index: number, currentArgs: TArgs): Promise<TArgs> => {
-			return this._storage[index](sender, currentArgs)
-				.then((resultingArgs) => {
-					if (index === this._storage.length - 1) {
-						return Promise.resolve(resultingArgs);
-					} else {
-						return _looper(index + 1, resultingArgs);
-					}
-				});
-		}
+		log.debug(`start invoking ${xlib.reflection.getTypeName(this)} ${this.name}`);
 
-		if (this._storage.length === 0) {
-			return Promise.resolve(initialArgs);
-		}
-		return _looper(0, initialArgs);
+		return Promise.try(() => {
+			const _looper = (index: number, currentArgs: TArgs): Promise<TArgs> => {
+				return this._storage[index](sender, currentArgs)
+					.then((resultingArgs) => {
+						if (index === this._storage.length - 1) {
+							return Promise.resolve(resultingArgs);
+						} else {
+							return _looper(index + 1, resultingArgs);
+						}
+					});
+			}
+
+			if (this._storage.length === 0) {
+				return Promise.resolve(initialArgs);
+			}
+			return _looper(0, initialArgs);
+		}).finally(() => {
+			log.debug(`finish invoking ${xlib.reflection.getTypeName(this)} ${this.name}`);
+		});
 	}
 }
 
@@ -93,7 +100,7 @@ export class EventBroadcastPipe<TSender, TArgs>{
  */
 export class EventBroadcastLimited<TSender, TArgs, TResult>{
 
-
+	constructor(public name: string) { }
 
 
 	public _storage: ((sender: TSender, args: TArgs) => Promise<TResult>)[] = [];
@@ -112,19 +119,25 @@ export class EventBroadcastLimited<TSender, TArgs, TResult>{
 	 * @param args
 	 */
 	public invoke(sender: TSender, args: TArgs): Promise<TResult> {
-		const _looper = (index: number): Promise<TResult> => {
-			return this._storage[index](sender, args)
-				.catch((err) => {
-					if (index === this._storage.length - 1) {
-						return Promise.reject(err);
-					}
-					return _looper(index + 1);
-				});
-		}
-		if (this._storage.length === 0) {
-			return Promise.resolve(undefined);
-		}
-		return _looper(0);
+		log.debug(`start invoking ${xlib.reflection.getTypeName(this)} ${this.name}`);
+
+		return Promise.try(() => {
+			const _looper = (index: number): Promise<TResult> => {
+				return this._storage[index](sender, args)
+					.catch((err) => {
+						if (index === this._storage.length - 1) {
+							return Promise.reject(err);
+						}
+						return _looper(index + 1);
+					});
+			}
+			if (this._storage.length === 0) {
+				return Promise.resolve(undefined);
+			}
+			return _looper(0);
+		}).finally(() => {
+			log.debug(`finish invoking ${xlib.reflection.getTypeName(this)} ${this.name}`);
+		});
 	}
 }
 
@@ -135,6 +148,7 @@ export class EventBroadcastLimited<TSender, TArgs, TResult>{
  */
 export class EventBroadcast<TSender, TArgs, TResult>  {
 
+	constructor(public name: string) { }
 	public _storage: ((sender: TSender, args: TArgs) => Promise<TResult>)[] = [];
 	public subscribe(callback: ((sender: TSender, args: TArgs) => Promise<TResult>)) {
 		this._storage.push(callback);
@@ -150,6 +164,9 @@ export class EventBroadcast<TSender, TArgs, TResult>  {
 	 * @param args
 	 */
 	public invoke(sender: TSender, args: TArgs): Promise<TResult[]> {
+		log.debug(`start invoking ${xlib.reflection.getTypeName(this)} ${this.name}`);
+
+		return Promise.try(() => {
 		let results: Promise<TResult>[] = [];
 
 		this._storage.forEach((callback) => {
@@ -159,12 +176,16 @@ export class EventBroadcast<TSender, TArgs, TResult>  {
 
 		let toReturn = Promise.all(results);
 		return toReturn;
+		}).finally(() => {
+			log.debug(`finish invoking ${xlib.reflection.getTypeName(this)} ${this.name}`);
+		});
 	}
 }
 /**
  *  a one-directional event subscription system.  (subscribers don't impact invoker in any way)
  */
 export class ActionBroadcast<TSender, TArgs>  {
+	constructor(public name: string) { }
 
 	public _storage: ((sender: TSender, args: TArgs) => void)[] = [];
 	public subscribe(callback: ((sender: TSender, args: TArgs) => void)) {
@@ -179,9 +200,14 @@ export class ActionBroadcast<TSender, TArgs>  {
 	 * @param args
 	 */
 	public invoke(sender: TSender, args: TArgs): void {
+
+		log.debug(`start invoking ${xlib.reflection.getTypeName(this)} ${this.name}`);
+
 		_.forEachRight(this._storage, (callback) => {
 			callback(sender, args);
 		});
+
+		log.debug(`finish invoking ${xlib.reflection.getTypeName(this)} ${this.name}`);
 	}
 }
 
@@ -190,42 +216,42 @@ export class ActionBroadcast<TSender, TArgs>  {
 export class ProxyCallbacks {
 
 	/** do not throw errors (or reject promises) from subscriber callbacks here, or it will disrupt internal proxy handling logic (see ```proxy.ctor.defaultCallbacks``` for details) */
-	public onError = new ActionBroadcast<Proxy | ProxyFinalRequestFilter | ProxyFinalResponseFilter, { ctx?: IContext; err: Error; errorKind: string, data?: any }>();
+	public onError = new ActionBroadcast<Proxy | ProxyFinalRequestFilter | ProxyFinalResponseFilter, { ctx?: IContext; err: Error; errorKind: string, data?: any }>("onError");
 
 	/** triggered when the context is created, before any other context specific events are triggered. 
 check ctx.url.protocol to decide what events to bind.  http, https, or ws */
-	public onContextInitialize = new EventBroadcast<Proxy, { ctx: IContext; }, void>();
+	public onContextInitialize = new EventBroadcast<Proxy, { ctx: IContext; }, void>("onContextInitialize");
 
-	public onWebSocketConnection = new EventBroadcast<Proxy, { ctx: IContext }, void>();
-	public onWebSocketFrame = new EventBroadcastPipe<WebSocket, { ctx: IContext;/** known types: "message" */ type: "message" | "ping" | "pong";/** true is from upstreamToProxy, false means from clientToProxy */ fromServer: boolean; data: any; flags: { binary: boolean }; }>();
+	public onWebSocketConnection = new EventBroadcast<Proxy, { ctx: IContext }, void>("onWebSocketConnection");
+	public onWebSocketFrame = new EventBroadcastPipe<WebSocket, { ctx: IContext;/** known types: "message" */ type: "message" | "ping" | "pong";/** true is from upstreamToProxy, false means from clientToProxy */ fromServer: boolean; data: any; flags: { binary: boolean }; }>("onWebSocketFrame");
 
-	public onWebSocketSend = new EventBroadcastPipe<WebSocket, { ctx: IContext;/** known types: "message" */ type: any;/**  */ fromServer: boolean; data: any; flags: any; }>();
-	public onWebSocketMessage = new EventBroadcastPipe<WebSocket, { ctx: IContext;/** known types: "message" */ type: any;/**  */ fromServer: boolean; data: any; flags: any; }>();
+	public onWebSocketSend = new EventBroadcastPipe<WebSocket, { ctx: IContext;/** known types: "message" */ type: any;/**  */ fromServer: boolean; data: any; flags: any; }>("onWebSocketSend");
+	public onWebSocketMessage = new EventBroadcastPipe<WebSocket, { ctx: IContext;/** known types: "message" */ type: any;/**  */ fromServer: boolean; data: any; flags: any; }>("onWebSocketMessage");
 
 	/** do not throw errors (or reject promises) from subscriber callbacks here, or it will disrupt internal proxy handling logic (see ```proxy.ctor.defaultCallbacks``` for details) */
-	public onWebSocketClose = new EventBroadcastPipe<WebSocket, { ctx: IContext; /** if false, closed by client.*/closedByServer: boolean, code: number; message: string; }>();
-	public onWebSocketError = new ActionBroadcast<Proxy | WebSocket, { ctx: IContext; err: Error, errorKind: string; }>();
-	public onRequest = new EventBroadcast<Proxy, { ctx: IContext }, void>();
-	public onRequestHeaders = new EventBroadcast<Proxy, { ctx: IContext }, void>();
-	public onRequestData = new EventBroadcastPipe<Proxy, { ctx: IContext, chunk: Buffer }>();
-	public onRequestEnd = new EventBroadcast<Proxy, { ctx: IContext }, void>();
+	public onWebSocketClose = new EventBroadcastPipe<WebSocket, { ctx: IContext; /** if false, closed by client.*/closedByServer: boolean, code: number; message: string; }>("onWebSocketClose");
+	public onWebSocketError = new ActionBroadcast<Proxy | WebSocket, { ctx: IContext; err: Error, errorKind: string; }>("onWebSocketError");
+	public onRequest = new EventBroadcast<Proxy, { ctx: IContext }, void>("onRequest");
+	public onRequestHeaders = new EventBroadcast<Proxy, { ctx: IContext }, void>("onRequestHeaders");
+	public onRequestData = new EventBroadcastPipe<Proxy, { ctx: IContext, chunk: Buffer }>("onRequestData");
+	public onRequestEnd = new EventBroadcast<Proxy, { ctx: IContext }, void>("onRequestEnd");
 
 	/** callback triggered by the ctx.proxyToServerRequest request when it's complete.   response is stored as ctx.serverToProxyResponse. */
-	public onResponse = new EventBroadcast<Proxy, { ctx: IContext }, void>();
-	public onResponseHeaders = new EventBroadcast<Proxy, { ctx: IContext }, void>();
-	public onResponseData = new EventBroadcastPipe<Proxy, { ctx: IContext, chunk: Buffer }>();
-	public onResponseEnd = new EventBroadcast<Proxy, { ctx: IContext }, void>();
+	public onResponse = new EventBroadcast<Proxy, { ctx: IContext }, void>("onResponse");
+	public onResponseHeaders = new EventBroadcast<Proxy, { ctx: IContext }, void>("onResponseHeaders");
+	public onResponseData = new EventBroadcastPipe<Proxy, { ctx: IContext, chunk: Buffer }>("onResponseData");
+	public onResponseEnd = new EventBroadcast<Proxy, { ctx: IContext }, void>("onResponseEnd");
 
 	/** allows retrying the request to upstream if desired (via the returned promise results), if so, the callbacks from ```onRequest``` onward will be retried.  */
-	public onProxyToUpstreamRequestError = new EventBroadcastLimited<http.ClientRequest, { ctx: IContext; err: Error; }, { retry?: boolean; }>();
+	public onProxyToUpstreamRequestError = new EventBroadcastLimited<http.ClientRequest, { ctx: IContext; err: Error; }, { retry?: boolean; }>("onProxyToUpstreamRequestError");
 
 
 	//proxy specific callbacks
-	public onConnect = new EventBroadcast<Proxy, { req: http.IncomingMessage; socket: net.Socket; head: Buffer; isSsl: boolean; otherArg: any; }, void>();
+	public onConnect = new EventBroadcast<Proxy, { req: http.IncomingMessage; socket: net.Socket; head: Buffer; isSsl: boolean; otherArg: any; }, void>("onConnect");
 
 
-	public onCertificateRequired = new EventBroadcastLimited<Proxy, { hostname: string }, ICertificatePaths>();
-	public onCertificateMissing = new EventBroadcastLimited<Proxy, { info: ICertificateMissingHint, files: ICertificatePaths }, ICertificateData>()
+	public onCertificateRequired = new EventBroadcastLimited<Proxy, { hostname: string }, ICertificatePaths>("onCertificateRequired");
+	public onCertificateMissing = new EventBroadcastLimited<Proxy, { info: ICertificateMissingHint, files: ICertificatePaths }, ICertificateData>("onCertificateMissing")
 
 }
 
@@ -815,7 +841,7 @@ export class Proxy {
 		//attach all callbacks from mod to our masterDispatcher
 		_.forOwn(mod, (dispatcher, key) => {
 			_.forEach(dispatcher._storage, (callback) => {
-				log.info(`attaching mod.${key} to proxy._masterModDispatcher.  callback=`, callback);
+				log.info(`attaching mod.${key} to proxy._masterModDispatcher.`);//  callback=`, dispatcher.);
 				this.callbacks[key].subscribe(callback)
 			});
 		});
@@ -1139,10 +1165,10 @@ export class Proxy {
 				// we need first byte of data to detect if request is SSL encrypted
 				if (!head || head.length === 0) {
 					socket.once('data', this._onHttpServerConnectData.bind(this, req, socket));
-					socket.on("data", (req, socket) => {
-						//JASONS HACK: test listening to https socket
-						log.warn("socket.on.data", { req, socket });
-					})
+					//socket.on("data", (req, socket) => {
+					//	//JASONS HACK: test listening to https socket
+					//	log.warn("socket.on.data...");//, { req, socket });
+					//})
 					socket.write('HTTP/1.1 200 OK\r\n');
 					if (this.keepAlive && req.headers['proxy-connection'] === 'keep-alive') {
 						socket.write('Proxy-Connection: keep-alive\r\n');
@@ -1167,8 +1193,11 @@ export class Proxy {
 
 
 		const makeConnection = (port) => {
+			log.warn("about to makeConnection (net.connect and bind error and then tunnel)");
 			// open a TCP connection to the remote host
 			var conn = net.connect(port, function () {
+
+				log.warn("net.connect made, about to tunnel", req.url);//{ port, conn, socket , req, head});
 				// create a tunnel between the two hosts
 				socket.pipe(conn);
 				conn.pipe(socket);
@@ -1186,6 +1215,8 @@ export class Proxy {
 			//this.onCertificateRequired(hostname, (err, files) => {
 			return this.callbacks.onCertificateRequired.invoke(this, { hostname })
 				.then((files) => {
+
+					log.warn("looking for https server for ", files);
 
 					async.auto({
 						'keyFileExists': function (callback) {
@@ -1333,6 +1364,7 @@ export class Proxy {
 					return makeConnection(this.sslServers[hostname].port);
 				}
 				getHttpsServer(hostname, (err: Error, port) => {
+					log.warn("got port for https server, about to make connection", { err, port });
 					process.nextTick(sem.leave.bind(sem));
 					if (err) {
 						//return this._onError('OPEN_HTTPS_SERVER_ERROR', err);
@@ -1342,6 +1374,8 @@ export class Proxy {
 				});
 			});
 		} else {
+
+			log.warn("about to make connection for http server", { port: this.httpPort });
 			return makeConnection(this.httpPort);
 		}
 
