@@ -9,6 +9,14 @@ var __extends = (this && this.__extends) || (function () {
         d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
     };
 })();
+var __assign = (this && this.__assign) || Object.assign || function(t) {
+    for (var s, i = 1, n = arguments.length; i < n; i++) {
+        s = arguments[i];
+        for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+            t[p] = s[p];
+    }
+    return t;
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 var xlib = require("xlib");
 //import slib = require("slib");
@@ -223,6 +231,8 @@ var ProxyCallbacks = (function () {
         this.onConnect = new EventBroadcast("onConnect");
         this.onCertificateRequired = new EventBroadcastLimited("onCertificateRequired");
         this.onCertificateMissing = new EventBroadcastLimited("onCertificateMissing");
+        //new handle authorization
+        this.onAuth = new EventBroadcastLimited("onAuth");
     }
     return ProxyCallbacks;
 }());
@@ -461,6 +471,11 @@ var Proxy = (function () {
         });
         return this;
     };
+    /**
+     * creates a https server object and binds events for it.
+     * @param options
+     * @param callback
+     */
     Proxy.prototype._createHttpsServer = function (options, callback) {
         var _this = this;
         var httpsServer = https.createServer(options);
@@ -523,6 +538,79 @@ var Proxy = (function () {
     //	this.onConnectHandlers.push(fn);
     //	return this;
     //};
+    /**
+     *  handle auth, if any callback for it is in place.
+     * @param isSsl
+     * @param head
+     * @param req
+     * @param socket
+     * @param ctx
+     */
+    Proxy.prototype._handleAuth = function (args) {
+        var _this = this;
+        //handle auth
+        return Promise.try(function () {
+            //if (args.isSsl === false) {
+            //	//http server, connect event won't send auth headers, need to do auth in the .onRequest event
+            //	return Promise.resolve();
+            //}
+            //code based on checkin here: https://github.com/joeferner/node-http-mitm-proxy/commit/ac5f32961fa19a970270695b8e99913b07958525
+            //and here: https://github.com/joeferner/node-http-mitm-proxy/commit/f657a9605baeda7c2678ab35808f7b2de1df59cb
+            if (_this.callbacks.onAuth._storage.length === 0) {
+                //no .onAuth() callbacks subscribed so ignore authentication
+                return Promise.resolve();
+            }
+            //https, check for auth headers
+            var head = args.head, req = args.req, socket = args.socket;
+            if (req.headers["proxy-authorization"] == null) {
+                // ctx.onResponseData((ctx,chunk,callback)=>{
+                //     log.warn("NO AUTH  ctx.onResponseData",ctx, chunk.toString("utf8"));
+                // })
+                //writeHead docs: https://nodejs.org/api/http.html#http_response_writehead_statuscode_statusmessage_headers
+                // ctx.proxyToClientResponse.writeHead(407,{"Proxy-authenticate":`Basic`});
+                // ctx.proxyToClientResponse.end("No Auth!");
+                //log.warn("HTTPS: NO AUTH!  rejecting in proxy.onConnect");
+                //header pattern described here: https://gist.github.com/axefrog/3353609
+                return Promise.reject(new Error("No Authentication Header Sent.")); //socket.end("HTTP/1.0 407 Proxy authentication required\nProxy-authenticate: Basic\r\n\r\nNoAuth!");
+            }
+            else {
+                //not doing auth here, just making sure proper auth header is received.
+                var authHeader = req.headers["proxy-authorization"];
+                if (authHeader.indexOf("Basic ") !== 0) {
+                    //return socket.end("HTTP/1.0 407 Proxy authentication required\nProxy-authenticate: Basic\r\n\r\nUnknown Auth type.  use Basic.");
+                    return Promise.reject(new Error("Unknown Proxy Authentication type.  Use Basic."));
+                }
+                var toDecode = authHeader.substring("Basic ".length);
+                var authDecoded = xlib.stringHelper.base64.decode(toDecode);
+                // log.info("got auth for", {
+                //     url: req.url,
+                //     authDecoded,
+                //     remote: req.connection.remoteAddress,
+                //     remotePort: req.connection.remotePort,
+                //     host: req.headers["host"],
+                //     headers: req.headers,
+                //     //test: req.connection.address(), req 
+                // });
+                // // // //log.warn("GOT AUTH!", { auth: req.headers["proxy-authorization"], authDecoded });
+                //log.warn("GOT AUTH", (req.connection as any));
+                //return config.onAuth(authDecoded, req);
+                //return Promise.resolve();
+                return _this.callbacks.onAuth.invoke(_this, __assign({ authPayload: authDecoded }, args));
+            }
+        }).catch(function (err) {
+            var head = args.head, req = args.req, socket = args.socket;
+            //log.error("onConnect auth processing error, sending error back to user",{err});
+            socket.end("HTTP/1.0 407 Proxy authentication required\nProxy-authenticate: Basic\r\n\r\nError. " + err.message);
+            err.isHandled = true;
+            //callback(err);
+            //return Promise.resolve();
+            return Promise.reject(err);
+        });
+    };
+    /**
+     *  bound event to http(s) server connect events
+     * @param args
+     */
     Proxy.prototype._onHttpServerConnect = function (args) {
         var _this = this;
         log.warn("_onHttpServerConnect ", args.req.url);
@@ -554,6 +642,10 @@ var Proxy = (function () {
         //	})
         return this.callbacks.onConnect.invoke(this, args)
             .then(function () {
+            //handle auth, if any callback for it is in place.
+            return _this._handleAuth(args);
+        })
+            .then(function () {
             var head = args.head, req = args.req, socket = args.socket;
             // we need first byte of data to detect if request is SSL encrypted
             if (!head || head.length === 0) {
@@ -570,7 +662,7 @@ var Proxy = (function () {
                 return socket.write('\r\n');
             }
             else {
-                _this._onHttpServerConnectData(req, socket, head);
+                return _this._onHttpServerConnectData(req, socket, head);
             }
         })
             .catch(function (err) {
