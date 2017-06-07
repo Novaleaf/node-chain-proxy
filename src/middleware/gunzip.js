@@ -1,5 +1,6 @@
 'use strict';
-var zlib = require('zlib');
+Object.defineProperty(exports, "__esModule", { value: true });
+var zlib = require("zlib");
 module.exports = {
     onResponse: function (ctx, callback) {
         if (ctx.serverToProxyResponse.headers['content-encoding']

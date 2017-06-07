@@ -35,6 +35,8 @@ var WebSocket = require("ws");
 var urlModule = require("url");
 var semaphore = require("semaphore");
 var ca = require("./ca");
+var stream = require("stream");
+var x = new stream.Transform();
 var middleware;
 (function (middleware) {
     middleware.gunzip = require('./middleware/gunzip');
@@ -640,7 +642,7 @@ var Proxy = (function () {
         //		this._onHttpServerConnectData(req, socket, head)
         //	}
         //	})
-        return this.callbacks.onConnect.invoke(this, args)
+        this.callbacks.onConnect.invoke(this, args)
             .then(function () {
             //handle auth, if any callback for it is in place.
             return _this._handleAuth(args);
@@ -667,7 +669,7 @@ var Proxy = (function () {
         })
             .catch(function (err) {
             _this.callbacks.onError.invoke(_this, { err: err, errorKind: "proxy._masterModDispatcher.onConnect() --> error", data: args });
-            return Promise.reject(err);
+            //return Promise.reject(err);
         });
     };
     Proxy.prototype._onHttpServerConnectData = function (req, socket, head) {
@@ -1078,67 +1080,6 @@ var Proxy = (function () {
                     ctx.clientToProxyRequest.resume();
                 });
             };
-            ////JASON EDIT:  helper to handle errors from proxyToServerRequest (retry them)
-            //const handleProxyToServerRequestError = (kind, ctx, err) => {
-            //	ctx.tags.failedUpstreamCalls++;
-            //	console.log("ERRRRRRRRRRRRRR!!!!!\n\n\n!!!!!\n\n\n", ctx.tags.failedUpstreamCalls, ctx.tags.uri)
-            //	if (ctx.tags.retryProxyRequest === true) {
-            //		return callOnRequestHandlersThenMakeProxyRequest();
-            //	} else {
-            //		//ctx._onError('PROXY_TO_SERVER_REQUEST_ERROR', ctx, err);						
-            //		return this.callbacks.onError.invoke(this, { err, errorKind: "PROXY_TO_SERVER_REQUEST_ERROR", ctx, });
-            //	}
-            //}
-            //const makeProxyToServerRequest = () => {
-            //	var proto: typeof http = (ctx.isSSL ? https : http) as any;
-            //	ctx.proxyToServerRequest = proto.request(ctx.proxyToServerRequestOptions, proxyToServerRequestComplete);
-            //	//JASON EDIT: wacky binding scheme to simply call our new handleProxyToServerRequestError() function
-            //	ctx.proxyToServerRequest.on('error', handleProxyToServerRequestError.bind(this, 'PROXY_TO_SERVER_REQUEST_ERROR', ctx));
-            //	//JASON EDIT: hack because we recall this, don't want stale "ProxyFinalRequestFilter" from our last call to makeProxyToServerRequest() (previous proxy attempt)
-            //	//ctx.requestFilters.push(new ProxyFinalRequestFilter(this, ctx));
-            //	var proxyFinalRequestFilter = new ProxyFinalRequestFilter(this, ctx);
-            //	var prevRequestPipeElem = ctx.clientToProxyRequest;
-            //	ctx.requestFilters.forEach((filter) => {
-            //		//filter.on('error', ctx._onError.bind(ctx, 'REQUEST_FILTER_ERROR', ctx));
-            //		filter.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "REQUEST_FILTER_ERROR", ctx }); });
-            //		try {
-            //			prevRequestPipeElem = prevRequestPipeElem.pipe(filter);
-            //		} catch (ex) {
-            //			console.log("why error oh WHY?!?!?", ex, prevRequestPipeElem.pipe, prevRequestPipeElem);
-            //		}
-            //	});
-            //	//JASON EDIT: hack because we recall this, don't want stale "ProxyFinalRequestFilter" from our last call to makeProxyToServerRequest() (previous proxy attempt)
-            //	try {
-            //		prevRequestPipeElem.pipe(proxyFinalRequestFilter as any); //JASON HACK:  pipe mismatch typings for .end function
-            //	} catch (ex) {
-            //		console.log("why error oh WHY DEUX?!?!?", ex, prevRequestPipeElem.pipe, prevRequestPipeElem);
-            //	}
-            //	ctx.clientToProxyRequest.resume();
-            //}
-            // private _onError(kind, ctx, err) {
-            //   this.onErrorHandlers.forEach(function (handler) {
-            //     return handler(ctx, err, kind);
-            //   });
-            //   if (ctx) {
-            //     ctx.onErrorHandlers.forEach(function (handler) {
-            //       return handler(ctx, err, kind);
-            //     });
-            //     //JASON EDIT: allow retrying failed proxy calls
-            //     ctx.tags.failedUpstreamCalls++;
-            //     if (ctx.tags.retryProxyRequest === true) {
-            //       // ctx.onResponseDataHandlers.length = 0;
-            //       // ctx.onResponseEndHandlers.length = 0;
-            //       makeProxyToServerRequest();
-            //     } else {
-            //       if (ctx.proxyToClientResponse && !ctx.proxyToClientResponse.headersSent) {
-            //         ctx.proxyToClientResponse.writeHead(504, 'Proxy Error');
-            //       }
-            //       if (ctx.proxyToClientResponse && !ctx.proxyToClientResponse.finished) {
-            //         ctx.proxyToClientResponse.end('' + kind + ': ' + err, 'utf8');
-            //       }
-            //     }
-            //   }
-            // };
             /**
              *  callback triggered by the ctx.proxyToServerRequest request when it's complete.   response is stored as ctx.serverToProxyResponse.
              * @param serverToProxyResponse
@@ -1149,39 +1090,6 @@ var Proxy = (function () {
                 console.warn("ctx.serverToProxyResponse.pause();");
                 serverToProxyResponse.pause();
                 ctx.serverToProxyResponse = serverToProxyResponse;
-                //return ctx._onResponse(ctx, (err) => {
-                //	if (err) {
-                //		//return ctx._onError('ON_RESPONSE_ERROR', ctx, err);
-                //		this.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_ERROR", ctx, });
-                //		return Promise.reject(err);
-                //	}
-                //	ctx.serverToProxyResponse.headers['transfer-encoding'] = 'chunked';
-                //	delete ctx.serverToProxyResponse.headers['content-length'];
-                //	if (this.keepAlive) {
-                //		if (ctx.clientToProxyRequest.headers['proxy-connection']) {
-                //			ctx.serverToProxyResponse.headers['proxy-connection'] = 'keep-alive';
-                //			ctx.serverToProxyResponse.headers['connection'] = 'keep-alive';
-                //		}
-                //	} else {
-                //		ctx.serverToProxyResponse.headers['connection'] = 'close';
-                //	}
-                //	return ctx._onResponseHeaders(ctx, (err) => {
-                //		if (err) {
-                //			//return ctx._onError('ON_RESPONSEHEADERS_ERROR', ctx, err);
-                //			this.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSEHEADERS_ERROR", ctx, });
-                //			return Promise.reject(err);
-                //		}
-                //		ctx.proxyToClientResponse.writeHead(ctx.serverToProxyResponse.statusCode, utils.filterAndCanonizeHeaders(ctx.serverToProxyResponse.headers));
-                //		ctx.responseFilters.push(new ProxyFinalResponseFilter(this, ctx));
-                //		var prevResponsePipeElem = ctx.serverToProxyResponse;
-                //		ctx.responseFilters.forEach((filter) => {
-                //			//filter.on('error', ctx._onError.bind(ctx, 'RESPONSE_FILTER_ERROR', ctx));
-                //			filter.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "RESPONSE_FILTER_ERROR", ctx }); });
-                //			prevResponsePipeElem = prevResponsePipeElem.pipe(filter);
-                //		});
-                //		return ctx.serverToProxyResponse.resume();
-                //	});
-                //});
                 return _this.callbacks.onResponse.invoke(_this, { ctx: ctx })
                     .catch(function (err) {
                     _this.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_ERROR", ctx: ctx, });
@@ -1216,27 +1124,6 @@ var Proxy = (function () {
                         });
                         console.warn("ctx.serverToProxyResponse.resume();");
                         return ctx.serverToProxyResponse.resume();
-                        //////   below is a rewrite of the above, but seems unnessicary, and probably doesn't work right with big responses?
-                        //console.warn("WTFFFFFFFFFFFFFF?????");
-                        //return Promise.each(ctx.responseFilters, (filter) => {
-                        //	console.warn("ProxyFinalResponseFilter about to enumerate");
-                        //	return new Promise((resolve, reject) => {
-                        //		console.warn("ProxyFinalResponseFilter START");
-                        //		filter.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "RESPONSE_FILTER_ERROR", ctx }); reject(); });
-                        //		filter.on("finish", () => {
-                        //			console.warn("ProxyFinalResponseFilter filter.on.finish!");
-                        //			resolve();
-                        //		});
-                        //		filter.on("end", () => {
-                        //			console.warn("ProxyFinalResponseFilter filter.on.end!");
-                        //			resolve();
-                        //		});
-                        //		prevResponsePipeElem = prevResponsePipeElem.pipe(filter as any);
-                        //	});
-                        //}).finally(() => {
-                        //	console.warn("ProxyFinalResponseFilter DONE AND RESUME!");
-                        //	ctx.serverToProxyResponse.resume();
-                        //});
                     });
                 });
             };

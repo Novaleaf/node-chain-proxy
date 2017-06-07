@@ -1,6 +1,6 @@
 'use strict';
 
-var zlib = require('zlib');
+import zlib = require('zlib');
 
 module.exports = {
   onResponse: function(ctx, callback) {
