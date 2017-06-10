@@ -913,6 +913,7 @@ var Proxy = (function () {
         //var this = this;
         var _this = this;
         var ctx = new IContext();
+        ctx.tags = {};
         ctx.isSSL = isSSL;
         ctx.clientToProxyWebSocket = ws;
         ctx.clientToProxyWebSocket.pause();
@@ -995,6 +996,7 @@ var Proxy = (function () {
         //var this = this;
         var _this = this;
         var ctx = new IContext();
+        ctx.tags = {};
         ctx.isSSL = isSSL;
         ctx.clientToProxyRequest = clientToProxyRequest;
         ctx.proxyToClientResponse = proxyToClientResponse;
@@ -1065,7 +1067,7 @@ var Proxy = (function () {
                     .then(function () {
                     //makeProxyToServerRequest() logic
                     var proto = (ctx.isSSL ? https : http);
-                    ctx.proxyToServerRequest = proto.request(ctx.proxyToServerRequestOptions, proxyToServerRequestComplete);
+                    ctx.proxyToServerRequest = proto.request(ctx.proxyToServerRequestOptions, proxyToServerResponseStarted);
                     //JASON EDIT: wacky binding scheme to simply call our new handleProxyToServerRequestError() function
                     //ctx.proxyToServerRequest.on('error', handleProxyToServerRequestError.bind(this, 'PROXY_TO_SERVER_REQUEST_ERROR', ctx));
                     ctx.proxyToServerRequest.on("error", function (err) {
@@ -1112,10 +1114,10 @@ var Proxy = (function () {
                 });
             };
             /**
-             *  callback triggered by the ctx.proxyToServerRequest request when it's complete.   response is stored as ctx.serverToProxyResponse.
+             *  callback triggered by the ctx.proxyToServerRequest request when it starts getting a response from the upstream server.   response is stored as ctx.serverToProxyResponse.
              * @param serverToProxyResponse
              */
-            var proxyToServerRequestComplete = function (serverToProxyResponse) {
+            var proxyToServerResponseStarted = function (serverToProxyResponse) {
                 //serverToProxyResponse.on('error', ctx._onError.bind(ctx, 'SERVER_TO_PROXY_RESPONSE_ERROR', ctx));
                 serverToProxyResponse.on("error", function (err) { _this.callbacks.onError.invoke(_this, { err: err, errorKind: "SERVER_TO_PROXY_RESPONSE_ERROR", ctx: ctx }); });
                 console.warn("ctx.serverToProxyResponse.pause();");
@@ -1145,6 +1147,8 @@ var Proxy = (function () {
                         return Promise.reject(err);
                     })
                         .then(function () {
+                        //send headers and statusCode from upstream to client
+                        log.assert(ctx.proxyToClientResponse.headersSent === false, "headers already sent before upstream can set, why?");
                         ctx.proxyToClientResponse.writeHead(ctx.serverToProxyResponse.statusCode, utils.filterAndCanonizeHeaders(ctx.serverToProxyResponse.headers));
                         ctx.responseFilters.push(new ProxyFinalResponseFilter(_this, ctx));
                         var prevResponsePipeElem = ctx.serverToProxyResponse;
@@ -1328,6 +1332,9 @@ var ProxyFinalResponseFilter = (function (_super) {
             })
                 .catch(function (err) {
                 _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_RESPONSE_END_ERROR", ctx: _this.ctx, });
+            })
+                .finally(function () {
+                return _this.proxy.callbacks.onContextDispose.invoke(_this, { ctx: _this.ctx });
             });
             //if (chunk) {
             //	console.warn("ProxyFinalResponseFilter.end.write");
@@ -1394,8 +1401,8 @@ var ProxyFinalResponseFilter = (function (_super) {
 ;
 //util.inherits(ProxyFinalResponseFilter, events.EventEmitter);
 /**
- *  misc internal helper functions */
-    * /;
+ *  misc internal helper functions
+ */
 var utils;
 (function (utils) {
     function closeClientRequestWithError(ctx, err, errorKind) {
@@ -1421,7 +1428,7 @@ var utils;
             ctx: ctx,
             statusCode: 504,
             statusReason: errorKind,
-            headers: { "scaleproxy-message": message },
+            headers: { "scaleproxy-message": xlib.stringHelper.toId(message) },
             bodyMessage: message,
         });
     }
@@ -1450,6 +1457,7 @@ var utils;
                 if (ctx.proxyToClientResponse.headersSent !== true) {
                     log.assert(args.statusCode != null, "headers not sent and you didn't specify a status code");
                     //if(ctx.proxyToClientResponse.args.statusC
+                    log.warn("closing and writing head", args);
                     ctx.proxyToClientResponse.writeHead(args.statusCode, args.statusReason, args.headers);
                 }
                 else {

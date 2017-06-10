@@ -908,6 +908,8 @@ export class Proxy {
 
 			});
 
+			
+
 			//fork webSocketFrame messages for convenience.
 			defaultCallbacks.onWebSocketFrame.subscribe((sender, args) => {
 				return Promise.try(() => {
@@ -1192,7 +1194,7 @@ export class Proxy {
 	 */
 	private _handleAuth(args: { isSsl: boolean; head: Buffer; req: http.IncomingMessage; socket: net.Socket; }) {
 		//handle auth
-		return Promise.try(() => {
+		return Promise.try<void>(() => {
 			//if (args.isSsl === false) {
 			//	//http server, connect event won't send auth headers, need to do auth in the .onRequest event
 			//	return Promise.resolve();
@@ -1566,6 +1568,7 @@ export class Proxy {
 		//var this = this;
 
 		var ctx = new IContext();
+		ctx.tags = {};
 		ctx.isSSL = isSSL;
 		ctx.clientToProxyWebSocket = ws;
 
@@ -1668,6 +1671,7 @@ export class Proxy {
 
 
 		var ctx = new IContext();
+		ctx.tags = {};
 		ctx.isSSL = isSSL;
 		ctx.clientToProxyRequest = clientToProxyRequest;
 		ctx.proxyToClientResponse = proxyToClientResponse;
@@ -1749,7 +1753,7 @@ export class Proxy {
 						.then(() => {
 							//makeProxyToServerRequest() logic
 							var proto: typeof http = (ctx.isSSL ? https : http) as any;
-							ctx.proxyToServerRequest = proto.request(ctx.proxyToServerRequestOptions, proxyToServerRequestComplete);
+							ctx.proxyToServerRequest = proto.request(ctx.proxyToServerRequestOptions, proxyToServerResponseStarted);
 							//JASON EDIT: wacky binding scheme to simply call our new handleProxyToServerRequestError() function
 							//ctx.proxyToServerRequest.on('error', handleProxyToServerRequestError.bind(this, 'PROXY_TO_SERVER_REQUEST_ERROR', ctx));
 							ctx.proxyToServerRequest.on("error", (err) => {
@@ -1799,10 +1803,10 @@ export class Proxy {
 
 
 				/**
-				 *  callback triggered by the ctx.proxyToServerRequest request when it's complete.   response is stored as ctx.serverToProxyResponse.
+				 *  callback triggered by the ctx.proxyToServerRequest request when it starts getting a response from the upstream server.   response is stored as ctx.serverToProxyResponse.
 				 * @param serverToProxyResponse
 				 */
-				const proxyToServerRequestComplete = (serverToProxyResponse: http.IncomingMessage) => {
+				const proxyToServerResponseStarted = (serverToProxyResponse: http.IncomingMessage) => {
 					//serverToProxyResponse.on('error', ctx._onError.bind(ctx, 'SERVER_TO_PROXY_RESPONSE_ERROR', ctx));
 					serverToProxyResponse.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "SERVER_TO_PROXY_RESPONSE_ERROR", ctx }); });
 					console.warn("ctx.serverToProxyResponse.pause();");
@@ -1836,6 +1840,8 @@ export class Proxy {
 									return Promise.reject(err);
 								})
 								.then(() => {
+									//send headers and statusCode from upstream to client
+									log.assert(ctx.proxyToClientResponse.headersSent === false, "headers already sent before upstream can set, why?");
 									ctx.proxyToClientResponse.writeHead(ctx.serverToProxyResponse.statusCode, utils.filterAndCanonizeHeaders(ctx.serverToProxyResponse.headers));
 									ctx.responseFilters.push(new ProxyFinalResponseFilter(this, ctx));
 									var prevResponsePipeElem = ctx.serverToProxyResponse;
@@ -2045,14 +2051,18 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 					console.warn("ProxyFinalResponseFilter.end.write.actualEnd");
 					return utils.closeClientRequest({
 						ctx: this.ctx
-					});					
+					});
 				})
 				.catch((err) => {
 					this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_END_ERROR", ctx: this.ctx, });
-				});
+				})
+				.finally(() => {
+					return this.proxy.callbacks.onContextDispose.invoke(this, { ctx: this.ctx });
+
+				})
 
 
-			
+
 
 			//if (chunk) {
 			//	console.warn("ProxyFinalResponseFilter.end.write");
@@ -2127,11 +2137,9 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 
 
 /**
- *  misc internal helper functions */
+ *  misc internal helper functions 
  */
 module utils {
-
-
 
 	export function closeClientRequestWithError(ctx: IContext, err: Error, errorKind: string) {
 
@@ -2162,7 +2170,7 @@ module utils {
 			ctx,
 			statusCode: 504,
 			statusReason: errorKind,
-			headers: { "scaleproxy-message": message },
+			headers: { "scaleproxy-message": xlib.stringHelper.toId(message) },
 			bodyMessage: message,
 		});
 	}
@@ -2201,7 +2209,12 @@ module utils {
 				if (ctx.proxyToClientResponse.headersSent !== true) {
 					log.assert(args.statusCode != null, "headers not sent and you didn't specify a status code");
 					//if(ctx.proxyToClientResponse.args.statusC
+
+					log.warn("closing and writing head", args);
 					ctx.proxyToClientResponse.writeHead(args.statusCode, args.statusReason, args.headers);
+
+
+					
 
 				} else {
 					log.assert(args.statusCode == null, "headers already sent");
