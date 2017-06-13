@@ -2284,8 +2284,9 @@ module utils {
 		const { ctx } = args;
 
 		if (ctx.isClosed === true) {
-			log.assert(false, "already closed");
-			return Promise.reject<void>("already closed");
+			return;
+			//log.assert(false, "already closed");
+			//return Promise.reject<void>("already closed");
 		}
 
 		ctx.isClosed = true;

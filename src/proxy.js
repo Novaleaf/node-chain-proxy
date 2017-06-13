@@ -1530,8 +1530,9 @@ var utils;
     function closeClientRequestAndDispose(args) {
         var ctx = args.ctx;
         if (ctx.isClosed === true) {
-            log.assert(false, "already closed");
-            return Promise.reject("already closed");
+            return;
+            //log.assert(false, "already closed");
+            //return Promise.reject<void>("already closed");
         }
         ctx.isClosed = true;
         return new Promise(function (resolve, reject) {
