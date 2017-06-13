@@ -1241,7 +1241,11 @@ var ProxyFinalRequestFilter = (function (_super) {
             })
                 .then(function () {
                 return _this.proxy.callbacks.onRequestEnd.invoke(_this.proxy, { ctx: _this.ctx });
-            }).catch(function (err) {
+            })
+                .then(function (args) {
+                return new Promise(function (resolve) { _this.ctx.proxyToServerRequest.end(chunk, resolve); });
+            })
+                .catch(function (err) {
                 _this.proxy.callbacks.onError.invoke(_this, { err: err, errorKind: "ON_REQUEST_END_ERROR", ctx: _this.ctx, });
                 return Promise.reject(err);
             });
@@ -1359,8 +1363,13 @@ var ProxyFinalResponseFilter = (function (_super) {
                 .then(function () {
                 return _this.proxy.callbacks.onResponseEnd.invoke(_this.proxy, { ctx: _this.ctx });
             })
-                .then(function () {
+                .then(function (args) {
                 console.warn("ProxyFinalResponseFilter.end.write.actualEnd");
+                return new Promise(function (resolve) {
+                    _this.ctx.proxyToClientResponse.end(chunk, resolve);
+                });
+            })
+                .then(function () {
                 return utils.closeClientRequestAndDispose({
                     ctx: _this.ctx
                 });

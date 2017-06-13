@@ -1575,7 +1575,7 @@ export class Proxy {
 	 */
 	private _onWebSocketServerConnect(isSSL, ws) {
 		//var this = this;
-		
+
 		var ctx = new Context(this);
 		ctx.isSSL = isSSL;
 		ctx.clientToProxyWebSocket = ws;
@@ -1930,8 +1930,8 @@ class ProxyFinalRequestFilter extends events.EventEmitter {
 	public close(...args: any[]) {
 
 		//ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
-		
-		this.proxy.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx:this.ctx });
+
+		this.proxy.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx: this.ctx });
 
 	}
 
@@ -1951,7 +1951,11 @@ class ProxyFinalRequestFilter extends events.EventEmitter {
 			})
 				.then(() => {
 					return this.proxy.callbacks.onRequestEnd.invoke(this.proxy, { ctx: this.ctx });
-				}).catch((err) => {
+				})
+				.then((args) => {
+					return new Promise((resolve) => { this.ctx.proxyToServerRequest.end(chunk, resolve); });
+				})
+				.catch((err) => {
 					this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
 					return Promise.reject(err);
 				})
@@ -2090,8 +2094,13 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 				.then(() => {
 					return this.proxy.callbacks.onResponseEnd.invoke(this.proxy, { ctx: this.ctx });
 				})
-				.then(() => {
+				.then((args) => {
 					console.warn("ProxyFinalResponseFilter.end.write.actualEnd");
+					return new Promise((resolve) => {
+						this.ctx.proxyToClientResponse.end(chunk, resolve);
+					});
+				})
+				.then(() => {
 					return utils.closeClientRequestAndDispose({
 						ctx: this.ctx
 					});
@@ -2100,10 +2109,10 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 					this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_END_ERROR", ctx: this.ctx, });
 					return Promise.reject(err);
 				})
-				//.then(() => {
-				//	return this.proxy.callbacks.onContextDispose.invoke(this.proxy, { ctx: this.ctx });
+			//.then(() => {
+			//	return this.proxy.callbacks.onContextDispose.invoke(this.proxy, { ctx: this.ctx });
 
-				//});
+			//});
 
 
 
