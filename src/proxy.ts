@@ -215,7 +215,9 @@ export class ActionBroadcast<TSender, TArgs>  {
 
 export class ProxyCallbacks {
 
-	/** do not throw errors (or reject promises) from subscriber callbacks here, or it will disrupt internal proxy handling logic (see ```proxy.ctor.defaultCallbacks``` for details) */
+	/** allows you to be notified of errors.  
+	internally, the default callback will terminate the client request and dispose of the context (if any).
+	do not throw errors (or reject promises) from subscriber callbacks here, or it will disrupt internal proxy handling logic (see ```proxy.ctor.defaultCallbacks``` for details) */
 	public onError = new ActionBroadcast<Proxy | ProxyFinalRequestFilter | ProxyFinalResponseFilter, { ctx?: Context; err: Error; errorKind: string, data?: any }>("onError");
 
 	/** triggered when the context is created, before any other context specific events are triggered. 
@@ -1926,8 +1928,9 @@ class ProxyFinalRequestFilter extends events.EventEmitter {
 	};
 	public close(...args: any[]) {
 
-		ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
-
+		//ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
+		
+		this.proxy.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx:this.ctx });
 
 	}
 
@@ -2059,6 +2062,14 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 		});
 		return true;
 	};
+
+	public close(...args: any[]) {
+
+		//ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
+
+		this.proxy.callbacks.onError.invoke(this, { err: new Error("upstream prematurely closed the connection"), errorKind: "UPSTREAM_TO_PROXY_RESPONSE_CLOSE", ctx: this.ctx });
+
+	}
 
 	public end(chunk: Buffer) {
 		//const this = this;

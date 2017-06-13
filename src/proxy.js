@@ -205,7 +205,9 @@ var ActionBroadcast = (function () {
 exports.ActionBroadcast = ActionBroadcast;
 var ProxyCallbacks = (function () {
     function ProxyCallbacks() {
-        /** do not throw errors (or reject promises) from subscriber callbacks here, or it will disrupt internal proxy handling logic (see ```proxy.ctor.defaultCallbacks``` for details) */
+        /** allows you to be notified of errors.
+        internally, the default callback will terminate the client request and dispose of the context (if any).
+        do not throw errors (or reject promises) from subscriber callbacks here, or it will disrupt internal proxy handling logic (see ```proxy.ctor.defaultCallbacks``` for details) */
         this.onError = new ActionBroadcast("onError");
         /** triggered when the context is created, before any other context specific events are triggered.
     check ctx.url.protocol to decide what events to bind.  http, https, or ws */
@@ -1217,12 +1219,12 @@ var ProxyFinalRequestFilter = (function (_super) {
     };
     ;
     ProxyFinalRequestFilter.prototype.close = function () {
-        var _this = this;
+        //ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
         var args = [];
         for (var _i = 0; _i < arguments.length; _i++) {
             args[_i] = arguments[_i];
         }
-        ctx.clientToProxyRequest.on("close", function () { _this.callbacks.onError.invoke(_this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx: ctx }); });
+        this.proxy.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx: this.ctx });
     };
     ProxyFinalRequestFilter.prototype.end = function (chunk) {
         var _this = this;
@@ -1336,6 +1338,14 @@ var ProxyFinalResponseFilter = (function (_super) {
         return true;
     };
     ;
+    ProxyFinalResponseFilter.prototype.close = function () {
+        //ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+        this.proxy.callbacks.onError.invoke(this, { err: new Error("upstream prematurely closed the connection"), errorKind: "UPSTREAM_TO_PROXY_RESPONSE_CLOSE", ctx: this.ctx });
+    };
     ProxyFinalResponseFilter.prototype.end = function (chunk) {
         //const this = this;
         var _this = this;
