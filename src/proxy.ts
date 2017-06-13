@@ -906,10 +906,10 @@ export class Proxy {
 
 				//const downstreamComplete = new Promise((resolve) => {
 
-					if (ctx.isClosed != true) {
-						log.assert(false, "why wasn't this closed yet?");
-						utils.closeClientRequestWithErrorAndDispose(ctx, new Error("context dispose and not yet closed"), "onContextDispose(), NOT_CLOSED");
-					}
+				if (ctx.isClosed != true) {
+					log.assert(false, "why wasn't this closed yet?");
+					utils.closeClientRequestWithErrorAndDispose(ctx, new Error("context dispose and not yet closed"), "onContextDispose(), NOT_CLOSED");
+				}
 				//});
 
 				//delete out everythign related to the context
@@ -1372,7 +1372,7 @@ export class Proxy {
 		}
 
 
-		const getHttpsServer = (hostname, callback) => {
+		const getHttpsServer = (hostname, callback, tries = 0) => {
 
 			//this.onCertificateRequired(hostname, (err, files) => {
 			return this.callbacks.onCertificateRequired.invoke(this, { hostname })
@@ -1442,6 +1442,7 @@ export class Proxy {
 								//		hosts: files.hosts
 								//	});
 								//});
+
 							}
 						}]
 					}, undefined, (err, results) => {
@@ -1458,34 +1459,54 @@ export class Proxy {
 							hosts = [hostname];
 						}
 						delete results.httpsOptions.hosts;
-						if (this.forceSNI && !hostname.match(/^[\d\.]+$/)) {
-							if (!this.silent) {
-								console.log('creating SNI context for ' + hostname);
-							}
-							hosts.forEach((host) => {
-								this.httpsServer.addContext(host, results.httpsOptions);
-								this.sslServers[host] = { port: this.httpsPort };
-							});
-							return callback(null, this.httpsPort);
-						} else {
-							if (!this.silent) {
-								console.log('starting server for ' + hostname);
-							}
-							results.httpsOptions.hosts = hosts;
-							this._createHttpsServer(results.httpsOptions, (port, httpsServer, wssServer) => {
+
+						try {
+							if (this.forceSNI && !hostname.match(/^[\d\.]+$/)) {
 								if (!this.silent) {
-									console.log('https server started for %s on %s', hostname, port);
+									console.log('creating SNI context for ' + hostname);
 								}
-								var sslServer = {
-									server: httpsServer,
-									wsServer: wssServer,
-									port: port
-								};
 								hosts.forEach((host) => {
-									this.sslServers[hostname] = sslServer;
+									this.httpsServer.addContext(host, results.httpsOptions);
+									this.sslServers[host] = { port: this.httpsPort };
 								});
-								return callback(null, port);
-							});
+								return callback(null, this.httpsPort);
+							} else {
+								if (!this.silent) {
+									console.log('starting server for ' + hostname);
+								}
+								results.httpsOptions.hosts = hosts;
+								this._createHttpsServer(results.httpsOptions, (port, httpsServer, wssServer) => {
+									if (!this.silent) {
+										console.log('https server started for %s on %s', hostname, port);
+									}
+									var sslServer = {
+										server: httpsServer,
+										wsServer: wssServer,
+										port: port
+									};
+									hosts.forEach((host) => {
+										this.sslServers[hostname] = sslServer;
+									});
+									return callback(null, port);
+								});
+							}
+						} catch (ex) {
+
+							//this catch clause will get triggered if there's a problem creating the https server, such as if there's a corrupted cert.
+							//if a pem file gets corrupted somehow (server crash) lets delete it and retry the cert creation process.
+
+							//delete pem and retry
+							const deletePromises = [new Promise((resolve) => fs.unlink(files.certFile, resolve)), new Promise((resolve) => fs.unlink(files.keyFile, resolve))];
+							Promise.all(deletePromises)
+								.then(() => {
+									if (tries <= 0) {
+										getHttpsServer(hostname, callback, tries + 1);
+									} else {
+										log.error("unable to create context for site", { hostname, files }, ex);
+										return callback(ex);
+									}
+
+								});
 						}
 					});
 				});
@@ -1774,7 +1795,7 @@ export class Proxy {
 							//JASON EDIT: wacky binding scheme to simply call our new handleProxyToServerRequestError() function
 							//ctx.proxyToServerRequest.on('error', handleProxyToServerRequestError.bind(this, 'PROXY_TO_SERVER_REQUEST_ERROR', ctx));
 							ctx.proxyToServerRequest.on("error", (err) => {
-								if (ctx.isDisposed === true) {	
+								if (ctx.isDisposed === true) {
 									//already disposed, for example this can occur when the client aborted the request early.
 									return;
 								}

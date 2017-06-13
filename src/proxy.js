@@ -731,7 +731,8 @@ var Proxy = (function () {
             //conn.on('error', this._onError.bind(this, 'PROXY_TO_PROXY_SOCKET_ERROR'));
             conn.on("error", function (err) { _this.callbacks.onError.invoke(_this, { err: err, errorKind: "PROXY_TO_PROXY_SOCKET_ERROR", data: { port: port } }); });
         };
-        var getHttpsServer = function (hostname, callback) {
+        var getHttpsServer = function (hostname, callback, tries) {
+            if (tries === void 0) { tries = 0; }
             //this.onCertificateRequired(hostname, (err, files) => {
             return _this.callbacks.onCertificateRequired.invoke(_this, { hostname: hostname })
                 .then(function (files) {
@@ -809,34 +810,52 @@ var Proxy = (function () {
                         hosts = [hostname];
                     }
                     delete results.httpsOptions.hosts;
-                    if (_this.forceSNI && !hostname.match(/^[\d\.]+$/)) {
-                        if (!_this.silent) {
-                            console.log('creating SNI context for ' + hostname);
-                        }
-                        hosts.forEach(function (host) {
-                            _this.httpsServer.addContext(host, results.httpsOptions);
-                            _this.sslServers[host] = { port: _this.httpsPort };
-                        });
-                        return callback(null, _this.httpsPort);
-                    }
-                    else {
-                        if (!_this.silent) {
-                            console.log('starting server for ' + hostname);
-                        }
-                        results.httpsOptions.hosts = hosts;
-                        _this._createHttpsServer(results.httpsOptions, function (port, httpsServer, wssServer) {
+                    try {
+                        if (_this.forceSNI && !hostname.match(/^[\d\.]+$/)) {
                             if (!_this.silent) {
-                                console.log('https server started for %s on %s', hostname, port);
+                                console.log('creating SNI context for ' + hostname);
                             }
-                            var sslServer = {
-                                server: httpsServer,
-                                wsServer: wssServer,
-                                port: port
-                            };
                             hosts.forEach(function (host) {
-                                _this.sslServers[hostname] = sslServer;
+                                _this.httpsServer.addContext(host, results.httpsOptions);
+                                _this.sslServers[host] = { port: _this.httpsPort };
                             });
-                            return callback(null, port);
+                            return callback(null, _this.httpsPort);
+                        }
+                        else {
+                            if (!_this.silent) {
+                                console.log('starting server for ' + hostname);
+                            }
+                            results.httpsOptions.hosts = hosts;
+                            _this._createHttpsServer(results.httpsOptions, function (port, httpsServer, wssServer) {
+                                if (!_this.silent) {
+                                    console.log('https server started for %s on %s', hostname, port);
+                                }
+                                var sslServer = {
+                                    server: httpsServer,
+                                    wsServer: wssServer,
+                                    port: port
+                                };
+                                hosts.forEach(function (host) {
+                                    _this.sslServers[hostname] = sslServer;
+                                });
+                                return callback(null, port);
+                            });
+                        }
+                    }
+                    catch (ex) {
+                        //this catch clause will get triggered if there's a problem creating the https server, such as if there's a corrupted cert.
+                        //if a pem file gets corrupted somehow (server crash) lets delete it and retry the cert creation process.
+                        //delete pem and retry
+                        var deletePromises = [new Promise(function (resolve) { return fs.unlink(files.certFile, resolve); }), new Promise(function (resolve) { return fs.unlink(files.keyFile, resolve); })];
+                        Promise.all(deletePromises)
+                            .then(function () {
+                            if (tries <= 0) {
+                                getHttpsServer(hostname, callback, tries + 1);
+                            }
+                            else {
+                                log.error("unable to create context for site", { hostname: hostname, files: files }, ex);
+                                return callback(ex);
+                            }
                         });
                     }
                 });
