@@ -24,7 +24,7 @@ var xlib = require("xlib");
 var _ = xlib.lodash;
 var __ = xlib.lolo;
 var Promise = xlib.promise.bluebird;
-var log = new xlib.logging.Logger(__filename);
+var log = new xlib.logging.Logger(__filename, xlib.environment.LogLevel.INFO);
 var async = require("async");
 var net = require("net");
 var http = require("http");
@@ -447,7 +447,7 @@ var Proxy = (function () {
         //attach all callbacks from mod to our masterDispatcher
         _.forOwn(mod, function (dispatcher, key) {
             _.forEach(dispatcher._storage, function (callback) {
-                log.info("attaching mod." + key + " to proxy._masterModDispatcher."); //  callback=`, dispatcher.);
+                log.debug("attaching mod." + key + " to proxy._masterModDispatcher."); //  callback=`, dispatcher.);
                 _this.callbacks[key].subscribe(callback);
             });
         });
@@ -624,7 +624,7 @@ var Proxy = (function () {
                 }
                 var toDecode = authHeader.substring("Basic ".length);
                 var authDecoded = xlib.stringHelper.base64.decode(toDecode);
-                // log.info("got auth for", {
+                // log.debug("got auth for", {
                 //     url: req.url,
                 //     authDecoded,
                 //     remote: req.connection.remoteAddress,
@@ -1034,7 +1034,7 @@ var Proxy = (function () {
         catch (ex) {
             //ignore / eat errors
         }
-        console.log("ctx.clientToProxyRequest.pause();");
+        //console.log("ctx.clientToProxyRequest.pause();");
         ctx.clientToProxyRequest.pause();
         //////apply mods
         //this.mods.forEach((mod) => {
@@ -1155,7 +1155,7 @@ var Proxy = (function () {
                     catch (ex) {
                         console.log("why error oh WHY DEUX?!?!?", ex, prevRequestPipeElem.pipe, prevRequestPipeElem);
                     }
-                    console.log("ctx.clientToProxyRequest.resume();");
+                    //console.log("ctx.clientToProxyRequest.resume();");
                     ctx.clientToProxyRequest.resume();
                 });
             };
@@ -1166,7 +1166,7 @@ var Proxy = (function () {
             var proxyToServerResponseStarted = function (serverToProxyResponse) {
                 //serverToProxyResponse.on('error', ctx._onError.bind(ctx, 'SERVER_TO_PROXY_RESPONSE_ERROR', ctx));
                 serverToProxyResponse.on("error", function (err) { _this.callbacks.onError.invoke(_this, { err: err, errorKind: "SERVER_TO_PROXY_RESPONSE_ERROR", ctx: ctx }); });
-                console.warn("ctx.serverToProxyResponse.pause();");
+                //console.warn("ctx.serverToProxyResponse.pause();");
                 serverToProxyResponse.pause();
                 ctx.serverToProxyResponse = serverToProxyResponse;
                 return _this.callbacks.onResponse.invoke(_this, { ctx: ctx })
@@ -1203,7 +1203,7 @@ var Proxy = (function () {
                             filter.on("error", function (err) { _this.callbacks.onError.invoke(_this, { err: err, errorKind: "RESPONSE_FILTER_ERROR", ctx: ctx }); });
                             prevResponsePipeElem = prevResponsePipeElem.pipe(filter);
                         });
-                        console.warn("ctx.serverToProxyResponse.resume();");
+                        //console.warn("ctx.serverToProxyResponse.resume();");
                         return ctx.serverToProxyResponse.resume();
                     });
                 });
@@ -1238,9 +1238,9 @@ var ProxyFinalRequestFilter = (function (_super) {
         //		return this.ctx.proxyToServerRequest.write(chunk);
         //	}
         //});
-        console.warn("ProxyFinalRequestFilter.write.attachPromise");
+        //console.warn("ProxyFinalRequestFilter.write.attachPromise");
         this.currentExecution = this.currentExecution.then(function () {
-            console.warn("ProxyFinalRequestFilter.write");
+            //console.warn("ProxyFinalRequestFilter.write");
             return _this.proxy.callbacks.onRequestData.invoke(_this.proxy, { ctx: _this.ctx, chunk: chunk })
                 .then(function (args) {
                 if (args.chunk) {
@@ -1266,9 +1266,9 @@ var ProxyFinalRequestFilter = (function (_super) {
     };
     ProxyFinalRequestFilter.prototype.end = function (chunk) {
         var _this = this;
-        console.warn("ProxyFinalRequestFilter.end.attachPromise");
+        //console.warn("ProxyFinalRequestFilter.end.attachPromise");
         this.currentExecution = this.currentExecution.then(function () {
-            console.warn("ProxyFinalRequestFilter.end.write");
+            //console.warn("ProxyFinalRequestFilter.end.write");
             return Promise.try(function () {
                 if (chunk != null) {
                     //if end had a chunk, do our normal request-data workflow firstly
@@ -1351,9 +1351,9 @@ var ProxyFinalResponseFilter = (function (_super) {
     }
     ProxyFinalResponseFilter.prototype.write = function (chunk) {
         var _this = this;
-        console.warn("ProxyFinalResponseFilter.write.attachPromise");
+        //console.warn("ProxyFinalResponseFilter.write.attachPromise");
         this.currentExecution = this.currentExecution.then(function () {
-            console.warn("ProxyFinalResponseFilter.write");
+            //console.warn("ProxyFinalResponseFilter.write");
             ////const this = this;
             //this.ctx._onResponseData(this.ctx, chunk, (err, chunk) => {
             //	if (err) {
@@ -1368,7 +1368,7 @@ var ProxyFinalResponseFilter = (function (_super) {
             return _this.proxy.callbacks.onResponseData.invoke(_this.proxy, { ctx: _this.ctx, chunk: chunk })
                 .then(function (args) {
                 if (args.chunk) {
-                    console.warn("ProxyFinalResponseFilter.write.actualWrite");
+                    //console.warn("ProxyFinalResponseFilter.write.actualWrite");
                     return args.ctx.proxyToClientResponse.write(args.chunk);
                 }
             })
@@ -1392,9 +1392,9 @@ var ProxyFinalResponseFilter = (function (_super) {
     ProxyFinalResponseFilter.prototype.end = function (chunk) {
         //const this = this;
         var _this = this;
-        console.warn("ProxyFinalResponseFilter.end.attachPromise");
+        //console.warn("ProxyFinalResponseFilter.end.attachPromise");
         this.currentExecution = this.currentExecution.then(function () {
-            console.warn("ProxyFinalResponseFilter.end.write");
+            //console.warn("ProxyFinalResponseFilter.end.write");
             return Promise.try(function () {
                 //if end had a chunk, do our normal response-data workflow firstly
                 if (chunk != null) {
@@ -1405,7 +1405,7 @@ var ProxyFinalResponseFilter = (function (_super) {
                 return _this.proxy.callbacks.onResponseEnd.invoke(_this.proxy, { ctx: _this.ctx });
             })
                 .then(function (args) {
-                console.warn("ProxyFinalResponseFilter.end.write.actualEnd");
+                //console.warn("ProxyFinalResponseFilter.end.write.actualEnd");
                 return new Promise(function (resolve) {
                     _this.ctx.proxyToClientResponse.end(chunk, resolve);
                 });
@@ -1549,7 +1549,7 @@ var utils;
                 if (ctx.proxyToClientResponse.headersSent !== true) {
                     log.assert(args.statusCode != null, "headers not sent and you didn't specify a status code");
                     //if(ctx.proxyToClientResponse.args.statusC
-                    log.warn("closing and writing head", args);
+                    log.debug("closing and writing head", args);
                     ctx.proxyToClientResponse.writeHead(args.statusCode, args.statusReason, args.headers);
                 }
                 else {

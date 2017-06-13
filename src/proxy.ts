@@ -5,7 +5,7 @@ import xlib = require("xlib");
 import _ = xlib.lodash;
 import __ = xlib.lolo;
 import Promise = xlib.promise.bluebird;
-let log = new xlib.logging.Logger(__filename);
+let log = new xlib.logging.Logger(__filename, xlib.environment.LogLevel.INFO);
 
 
 import async = require('async');
@@ -881,7 +881,7 @@ export class Proxy {
 		//attach all callbacks from mod to our masterDispatcher
 		_.forOwn(mod, (dispatcher, key) => {
 			_.forEach(dispatcher._storage, (callback) => {
-				log.info(`attaching mod.${key} to proxy._masterModDispatcher.`);//  callback=`, dispatcher.);
+				log.debug(`attaching mod.${key} to proxy._masterModDispatcher.`);//  callback=`, dispatcher.);
 				this.callbacks[key].subscribe(callback)
 			});
 		});
@@ -1246,7 +1246,7 @@ export class Proxy {
 				let toDecode = authHeader.substring("Basic ".length);
 				let authDecoded = xlib.stringHelper.base64.decode(toDecode);
 
-				// log.info("got auth for", {
+				// log.debug("got auth for", {
 				//     url: req.url,
 				//     authDecoded,
 				//     remote: req.connection.remoteAddress,
@@ -1711,7 +1711,7 @@ export class Proxy {
 		} catch (ex) {
 			//ignore / eat errors
 		}
-		console.log("ctx.clientToProxyRequest.pause();");
+		//console.log("ctx.clientToProxyRequest.pause();");
 		ctx.clientToProxyRequest.pause();
 
 		//////apply mods
@@ -1837,7 +1837,7 @@ export class Proxy {
 							} catch (ex) {
 								console.log("why error oh WHY DEUX?!?!?", ex, prevRequestPipeElem.pipe, prevRequestPipeElem);
 							}
-							console.log("ctx.clientToProxyRequest.resume();");
+							//console.log("ctx.clientToProxyRequest.resume();");
 							ctx.clientToProxyRequest.resume();
 						})
 
@@ -1852,7 +1852,7 @@ export class Proxy {
 				const proxyToServerResponseStarted = (serverToProxyResponse: http.IncomingMessage) => {
 					//serverToProxyResponse.on('error', ctx._onError.bind(ctx, 'SERVER_TO_PROXY_RESPONSE_ERROR', ctx));
 					serverToProxyResponse.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "SERVER_TO_PROXY_RESPONSE_ERROR", ctx }); });
-					console.warn("ctx.serverToProxyResponse.pause();");
+					//console.warn("ctx.serverToProxyResponse.pause();");
 					serverToProxyResponse.pause();
 					ctx.serverToProxyResponse = serverToProxyResponse;
 
@@ -1898,7 +1898,7 @@ export class Proxy {
 										filter.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "RESPONSE_FILTER_ERROR", ctx }); });
 										prevResponsePipeElem = prevResponsePipeElem.pipe(filter as any);
 									});
-									console.warn("ctx.serverToProxyResponse.resume();");
+									//console.warn("ctx.serverToProxyResponse.resume();");
 									return ctx.serverToProxyResponse.resume();
 
 								})
@@ -1938,11 +1938,11 @@ class ProxyFinalRequestFilter extends events.EventEmitter {
 		//	}
 		//});
 
-		console.warn("ProxyFinalRequestFilter.write.attachPromise");
+		//console.warn("ProxyFinalRequestFilter.write.attachPromise");
 
 		this.currentExecution = this.currentExecution.then(() => {
 
-			console.warn("ProxyFinalRequestFilter.write");
+			//console.warn("ProxyFinalRequestFilter.write");
 			return this.proxy.callbacks.onRequestData.invoke(this.proxy, { ctx: this.ctx, chunk })
 				.then((args) => {
 
@@ -1972,11 +1972,11 @@ class ProxyFinalRequestFilter extends events.EventEmitter {
 	public end(chunk: Buffer) {
 
 
-		console.warn("ProxyFinalRequestFilter.end.attachPromise");
+		//console.warn("ProxyFinalRequestFilter.end.attachPromise");
 		this.currentExecution = this.currentExecution.then<any>(() => {
 
 
-			console.warn("ProxyFinalRequestFilter.end.write");
+			//console.warn("ProxyFinalRequestFilter.end.write");
 			return Promise.try(() => {
 				if (chunk != null) {
 					//if end had a chunk, do our normal request-data workflow firstly
@@ -2073,10 +2073,10 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 	public write(chunk) {
 
 
-		console.warn("ProxyFinalResponseFilter.write.attachPromise");
+		//console.warn("ProxyFinalResponseFilter.write.attachPromise");
 		this.currentExecution = this.currentExecution.then(() => {
 
-			console.warn("ProxyFinalResponseFilter.write");
+			//console.warn("ProxyFinalResponseFilter.write");
 			////const this = this;
 			//this.ctx._onResponseData(this.ctx, chunk, (err, chunk) => {
 			//	if (err) {
@@ -2092,7 +2092,7 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 				.then((args) => {
 
 					if (args.chunk) {
-						console.warn("ProxyFinalResponseFilter.write.actualWrite");
+						//console.warn("ProxyFinalResponseFilter.write.actualWrite");
 						return args.ctx.proxyToClientResponse.write(args.chunk);
 					}
 				})
@@ -2117,11 +2117,11 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 	public end(chunk: Buffer) {
 		//const this = this;
 
-		console.warn("ProxyFinalResponseFilter.end.attachPromise");
+		//console.warn("ProxyFinalResponseFilter.end.attachPromise");
 		this.currentExecution = this.currentExecution.then(() => {
 
 
-			console.warn("ProxyFinalResponseFilter.end.write");
+			//console.warn("ProxyFinalResponseFilter.end.write");
 
 			return Promise.try(() => {
 				//if end had a chunk, do our normal response-data workflow firstly
@@ -2133,7 +2133,7 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 					return this.proxy.callbacks.onResponseEnd.invoke(this.proxy, { ctx: this.ctx });
 				})
 				.then((args) => {
-					console.warn("ProxyFinalResponseFilter.end.write.actualEnd");
+					//console.warn("ProxyFinalResponseFilter.end.write.actualEnd");
 					return new Promise((resolve) => {
 						this.ctx.proxyToClientResponse.end(chunk, resolve);
 					});
@@ -2306,7 +2306,7 @@ module utils {
 					log.assert(args.statusCode != null, "headers not sent and you didn't specify a status code");
 					//if(ctx.proxyToClientResponse.args.statusC
 
-					log.warn("closing and writing head", args);
+					log.debug("closing and writing head", args);
 					ctx.proxyToClientResponse.writeHead(args.statusCode, args.statusReason, args.headers);
 
 
