@@ -348,12 +348,12 @@ var Proxy = (function () {
             defaultCallbacks.onContextDispose.subscribe(function (sender, args) {
                 var ctx = args.ctx;
                 log.assert(ctx.isDisposed === false);
-                var downstreamComplete = new Promise(function (resolve) {
-                    if (ctx.isClosed != true) {
-                        log.assert(false, "why wasn't this closed yet?");
-                        utils.closeClientRequestWithErrorAndDispose(ctx, new Error("context dispose and not yet closed"), "onContextDispose(), NOT_CLOSED");
-                    }
-                });
+                //const downstreamComplete = new Promise((resolve) => {
+                if (ctx.isClosed != true) {
+                    log.assert(false, "why wasn't this closed yet?");
+                    utils.closeClientRequestWithErrorAndDispose(ctx, new Error("context dispose and not yet closed"), "onContextDispose(), NOT_CLOSED");
+                }
+                //});
                 //delete out everythign related to the context
                 ctx._dispose();
             });
@@ -1027,6 +1027,18 @@ var Proxy = (function () {
             ctx.clientToProxyRequest.on("error", function (err) { _this.callbacks.onError.invoke(_this, { err: err, errorKind: "CLIENT_TO_PROXY_REQUEST_ERROR", ctx: ctx }); });
             //ctx.proxyToClientResponse.on('error', ctx._onError.bind(ctx, 'PROXY_TO_CLIENT_RESPONSE_ERROR', ctx));
             ctx.proxyToClientResponse.on("error", function (err) { _this.callbacks.onError.invoke(_this, { err: err, errorKind: "PROXY_TO_CLIENT_RESPONSE_ERROR", ctx: ctx }); });
+            ctx.clientToProxyRequest.on("close", function () {
+                var args = [];
+                for (var _i = 0; _i < arguments.length; _i++) {
+                    args[_i] = arguments[_i];
+                }
+                log.warn("ctx.clientToProxyRequest.on('close'); !!!!", args);
+                _this.callbacks.onError.invoke(_this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx: ctx });
+            });
+            //ctx.clientToProxyRequest.on("end", (...args: any[]) => {
+            //	log.warn("ctx.clientToProxyRequest.on('end'); !!!!", args);
+            //});
+            //
             //ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
             //ctx.clientToProxyRequest.on("end", (...args: any[]) => { log.error("ctx.clientToProxyRequest.on.end", args); });
             var hostPort = utils.parseHostAndPort(ctx.clientToProxyRequest, ctx.isSSL ? 443 : 80);
@@ -1081,6 +1093,10 @@ var Proxy = (function () {
                     //JASON EDIT: wacky binding scheme to simply call our new handleProxyToServerRequestError() function
                     //ctx.proxyToServerRequest.on('error', handleProxyToServerRequestError.bind(this, 'PROXY_TO_SERVER_REQUEST_ERROR', ctx));
                     ctx.proxyToServerRequest.on("error", function (err) {
+                        if (ctx.isDisposed === true) {
+                            //already disposed, for example this can occur when the client aborted the request early.
+                            return;
+                        }
                         //handleProxyToServerRequestError() logic
                         return _this.callbacks.onProxyToUpstreamRequestError.invoke(ctx.proxyToServerRequest, { ctx: ctx, err: err })
                             .then(function (onUpstreamErrorResults) {
@@ -1226,6 +1242,7 @@ var ProxyFinalRequestFilter = (function (_super) {
         for (var _i = 0; _i < arguments.length; _i++) {
             args[_i] = arguments[_i];
         }
+        log.warn("CLIENT REQUEST CLOSE EVENT!!!!");
         this.proxy.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx: this.ctx });
     };
     ProxyFinalRequestFilter.prototype.end = function (chunk) {
@@ -1344,10 +1361,15 @@ var ProxyFinalResponseFilter = (function (_super) {
         return true;
     };
     ;
-    //public close(...args: any[]) {
-    //	//ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
-    //	this.proxy.callbacks.onError.invoke(this, { err: new Error("upstream prematurely closed the connection"), errorKind: "UPSTREAM_TO_PROXY_RESPONSE_CLOSE", ctx: this.ctx });
-    //}
+    ProxyFinalResponseFilter.prototype.close = function () {
+        var args = [];
+        for (var _i = 0; _i < arguments.length; _i++) {
+            args[_i] = arguments[_i];
+        }
+        log.warn("UPSTREAM RESPONSE CLOSE EVENT!!!!");
+        //ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
+        this.proxy.callbacks.onError.invoke(this, { err: new Error("upstream prematurely closed the connection"), errorKind: "UPSTREAM_TO_PROXY_RESPONSE_CLOSE", ctx: this.ctx });
+    };
     ProxyFinalResponseFilter.prototype.end = function (chunk) {
         //const this = this;
         var _this = this;
@@ -1487,7 +1509,6 @@ var utils;
      * @param
      */
     function closeClientRequestAndDispose(args) {
-        var _this = this;
         var ctx = args.ctx;
         if (ctx.isClosed === true) {
             log.assert(false, "already closed");
@@ -1499,7 +1520,12 @@ var utils;
             if (ctx.proxyToServerRequest !== null) {
                 ctx.proxyToServerRequest.abort();
             }
-            if (ctx.proxyToClientResponse != null && ctx.proxyToClientResponse.finished !== true) {
+            if (ctx.proxyToClientResponse == null || ctx.proxyToClientResponse.finished === true) {
+                //done or never started
+                resolve();
+                return;
+            }
+            else {
                 //close out downstream connection
                 if (ctx.proxyToClientResponse.headersSent !== true) {
                     log.assert(args.statusCode != null, "headers not sent and you didn't specify a status code");
@@ -1513,14 +1539,9 @@ var utils;
                 ctx.proxyToClientResponse.end(args.bodyMessage, resolve);
                 return;
             }
-            else {
-                log.assert(false, "already closed or not yet open");
-                reject(new Error("already closed or not yet open"));
-                return;
-            }
         })
             .finally(function () {
-            return ctx.proxy.callbacks.onContextDispose.invoke(ctx.proxy, { ctx: _this.ctx });
+            return ctx.proxy.callbacks.onContextDispose.invoke(ctx.proxy, { ctx: ctx });
         });
     }
     utils.closeClientRequestAndDispose = closeClientRequestAndDispose;

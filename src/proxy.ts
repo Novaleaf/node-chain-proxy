@@ -904,13 +904,13 @@ export class Proxy {
 				const { ctx } = args;
 				log.assert(ctx.isDisposed === false);
 
-				const downstreamComplete = new Promise((resolve) => {
+				//const downstreamComplete = new Promise((resolve) => {
 
 					if (ctx.isClosed != true) {
 						log.assert(false, "why wasn't this closed yet?");
 						utils.closeClientRequestWithErrorAndDispose(ctx, new Error("context dispose and not yet closed"), "onContextDispose(), NOT_CLOSED");
 					}
-				});
+				//});
 
 				//delete out everythign related to the context
 				ctx._dispose();
@@ -1706,7 +1706,14 @@ export class Proxy {
 				//ctx.proxyToClientResponse.on('error', ctx._onError.bind(ctx, 'PROXY_TO_CLIENT_RESPONSE_ERROR', ctx));
 				ctx.proxyToClientResponse.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "PROXY_TO_CLIENT_RESPONSE_ERROR", ctx }); });
 
-
+				ctx.clientToProxyRequest.on("close", (...args: any[]) => {
+					log.warn("ctx.clientToProxyRequest.on('close'); !!!!", args);
+					this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx });
+				});
+				//ctx.clientToProxyRequest.on("end", (...args: any[]) => {
+				//	log.warn("ctx.clientToProxyRequest.on('end'); !!!!", args);
+				//});
+				//
 				//ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
 				//ctx.clientToProxyRequest.on("end", (...args: any[]) => { log.error("ctx.clientToProxyRequest.on.end", args); });
 
@@ -1767,6 +1774,10 @@ export class Proxy {
 							//JASON EDIT: wacky binding scheme to simply call our new handleProxyToServerRequestError() function
 							//ctx.proxyToServerRequest.on('error', handleProxyToServerRequestError.bind(this, 'PROXY_TO_SERVER_REQUEST_ERROR', ctx));
 							ctx.proxyToServerRequest.on("error", (err) => {
+								if (ctx.isDisposed === true) {	
+									//already disposed, for example this can occur when the client aborted the request early.
+									return;
+								}
 								//handleProxyToServerRequestError() logic
 								return this.callbacks.onProxyToUpstreamRequestError.invoke(ctx.proxyToServerRequest, { ctx, err })
 									.then((onUpstreamErrorResults) => {
@@ -1931,6 +1942,8 @@ class ProxyFinalRequestFilter extends events.EventEmitter {
 
 		//ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
 
+		log.warn("CLIENT REQUEST CLOSE EVENT!!!!");
+
 		this.proxy.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx: this.ctx });
 
 	}
@@ -2018,8 +2031,11 @@ class ProxyFinalRequestFilter extends events.EventEmitter {
 
 			//////}
 		});
+
+
 	};
 }
+
 
 class ProxyFinalResponseFilter extends events.EventEmitter {
 
@@ -2068,13 +2084,14 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 		return true;
 	};
 
-	//public close(...args: any[]) {
+	public close(...args: any[]) {
 
-	//	//ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
+		log.warn("UPSTREAM RESPONSE CLOSE EVENT!!!!");
+		//ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
 
-	//	this.proxy.callbacks.onError.invoke(this, { err: new Error("upstream prematurely closed the connection"), errorKind: "UPSTREAM_TO_PROXY_RESPONSE_CLOSE", ctx: this.ctx });
+		this.proxy.callbacks.onError.invoke(this, { err: new Error("upstream prematurely closed the connection"), errorKind: "UPSTREAM_TO_PROXY_RESPONSE_CLOSE", ctx: this.ctx });
 
-	//}
+	}
 
 	public end(chunk: Buffer) {
 		//const this = this;
@@ -2108,7 +2125,8 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 				.catch((err) => {
 					this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_END_ERROR", ctx: this.ctx, });
 					return Promise.reject(err);
-				})
+				});
+
 			//.then(() => {
 			//	return this.proxy.callbacks.onContextDispose.invoke(this.proxy, { ctx: this.ctx });
 
@@ -2183,6 +2201,7 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 			//		})
 			//}
 		});
+
 	};
 
 };
@@ -2256,8 +2275,11 @@ module utils {
 				ctx.proxyToServerRequest.abort();
 			}
 
-
-			if (ctx.proxyToClientResponse != null && ctx.proxyToClientResponse.finished !== true) {
+			if (ctx.proxyToClientResponse == null || ctx.proxyToClientResponse.finished === true) {
+				//done or never started
+				resolve();
+				return;
+			} else {
 				//close out downstream connection
 				if (ctx.proxyToClientResponse.headersSent !== true) {
 					log.assert(args.statusCode != null, "headers not sent and you didn't specify a status code");
@@ -2275,16 +2297,11 @@ module utils {
 
 				ctx.proxyToClientResponse.end(args.bodyMessage, resolve);
 				return;
-
-			} else {
-				log.assert(false, "already closed or not yet open");
-				reject(new Error("already closed or not yet open"));
-				return;
 			}
 
 		})
 			.finally(() => {
-				return ctx.proxy.callbacks.onContextDispose.invoke(ctx.proxy, { ctx: this.ctx });
+				return ctx.proxy.callbacks.onContextDispose.invoke(ctx.proxy, { ctx });
 			});
 
 	}
