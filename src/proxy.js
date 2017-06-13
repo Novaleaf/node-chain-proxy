@@ -921,7 +921,7 @@ var Proxy = (function () {
     Proxy.prototype._onWebSocketServerConnect = function (isSSL, ws) {
         //var this = this;
         var _this = this;
-        var ctx = new Context();
+        var ctx = new Context(this);
         ctx.isSSL = isSSL;
         ctx.clientToProxyWebSocket = ws;
         ctx.clientToProxyWebSocket.pause();
@@ -1003,7 +1003,7 @@ var Proxy = (function () {
     Proxy.prototype._onHttpServerRequest = function (isSSL, clientToProxyRequest, proxyToClientResponse) {
         //var this = this;
         var _this = this;
-        var ctx = new Context();
+        var ctx = new Context(this);
         ctx.isSSL = isSSL;
         ctx.clientToProxyRequest = clientToProxyRequest;
         ctx.proxyToClientResponse = proxyToClientResponse;
@@ -1015,6 +1015,7 @@ var Proxy = (function () {
         catch (ex) {
             //ignore / eat errors
         }
+        console.log("ctx.clientToProxyRequest.pause();");
         ctx.clientToProxyRequest.pause();
         //////apply mods
         //this.mods.forEach((mod) => {
@@ -1119,6 +1120,7 @@ var Proxy = (function () {
                     catch (ex) {
                         console.log("why error oh WHY DEUX?!?!?", ex, prevRequestPipeElem.pipe, prevRequestPipeElem);
                     }
+                    console.log("ctx.clientToProxyRequest.resume();");
                     ctx.clientToProxyRequest.resume();
                 });
             };
@@ -1338,14 +1340,10 @@ var ProxyFinalResponseFilter = (function (_super) {
         return true;
     };
     ;
-    ProxyFinalResponseFilter.prototype.close = function () {
-        //ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
-        var args = [];
-        for (var _i = 0; _i < arguments.length; _i++) {
-            args[_i] = arguments[_i];
-        }
-        this.proxy.callbacks.onError.invoke(this, { err: new Error("upstream prematurely closed the connection"), errorKind: "UPSTREAM_TO_PROXY_RESPONSE_CLOSE", ctx: this.ctx });
-    };
+    //public close(...args: any[]) {
+    //	//ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
+    //	this.proxy.callbacks.onError.invoke(this, { err: new Error("upstream prematurely closed the connection"), errorKind: "UPSTREAM_TO_PROXY_RESPONSE_CLOSE", ctx: this.ctx });
+    //}
     ProxyFinalResponseFilter.prototype.end = function (chunk) {
         //const this = this;
         var _this = this;
@@ -1372,8 +1370,8 @@ var ProxyFinalResponseFilter = (function (_super) {
                 return Promise.reject(err);
             });
             //.then(() => {
-            //	return this.proxy.callbacks.onContextDispose.invoke(this, { ctx: this.ctx });
-            //})
+            //	return this.proxy.callbacks.onContextDispose.invoke(this.proxy, { ctx: this.ctx });
+            //});
             //if (chunk) {
             //	console.warn("ProxyFinalResponseFilter.end.write");
             //	//return this.ctx._onResponseData(this.ctx, chunk, (err, chunk) => {
@@ -1512,7 +1510,7 @@ var utils;
                 return;
             }
         })
-            .then(function () {
+            .finally(function () {
             return ctx.proxy.callbacks.onContextDispose.invoke(ctx.proxy, { ctx: _this.ctx });
         });
     }

@@ -258,7 +258,7 @@ check ctx.url.protocol to decide what events to bind.  http, https, or ws */
 	//new handle authorization
 	public onAuth = new EventBroadcastLimited<Proxy, { authPayload: string; isSsl: boolean; head: Buffer; req: http.IncomingMessage; socket: net.Socket; }, { isAuthorized: boolean; }>("onAuth");
 
-	public onContextDispose = new ActionBroadcast<ProxyFinalResponseFilter, { ctx: Context }>("onContextDispose");
+	public onContextDispose = new ActionBroadcast<Proxy, { ctx: Context }>("onContextDispose");
 
 }
 
@@ -1575,8 +1575,8 @@ export class Proxy {
 	 */
 	private _onWebSocketServerConnect(isSSL, ws) {
 		//var this = this;
-
-		var ctx = new Context();
+		
+		var ctx = new Context(this);
 		ctx.isSSL = isSSL;
 		ctx.clientToProxyWebSocket = ws;
 
@@ -1678,7 +1678,7 @@ export class Proxy {
 		//var this = this;
 
 
-		var ctx = new Context();
+		var ctx = new Context(this);
 		ctx.isSSL = isSSL;
 		ctx.clientToProxyRequest = clientToProxyRequest;
 		ctx.proxyToClientResponse = proxyToClientResponse;
@@ -1690,7 +1690,7 @@ export class Proxy {
 		} catch (ex) {
 			//ignore / eat errors
 		}
-
+		console.log("ctx.clientToProxyRequest.pause();");
 		ctx.clientToProxyRequest.pause();
 
 		//////apply mods
@@ -1805,6 +1805,7 @@ export class Proxy {
 							} catch (ex) {
 								console.log("why error oh WHY DEUX?!?!?", ex, prevRequestPipeElem.pipe, prevRequestPipeElem);
 							}
+							console.log("ctx.clientToProxyRequest.resume();");
 							ctx.clientToProxyRequest.resume();
 						})
 
@@ -2063,13 +2064,13 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 		return true;
 	};
 
-	public close(...args: any[]) {
+	//public close(...args: any[]) {
 
-		//ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
+	//	//ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
 
-		this.proxy.callbacks.onError.invoke(this, { err: new Error("upstream prematurely closed the connection"), errorKind: "UPSTREAM_TO_PROXY_RESPONSE_CLOSE", ctx: this.ctx });
+	//	this.proxy.callbacks.onError.invoke(this, { err: new Error("upstream prematurely closed the connection"), errorKind: "UPSTREAM_TO_PROXY_RESPONSE_CLOSE", ctx: this.ctx });
 
-	}
+	//}
 
 	public end(chunk: Buffer) {
 		//const this = this;
@@ -2100,9 +2101,9 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 					return Promise.reject(err);
 				})
 				//.then(() => {
-				//	return this.proxy.callbacks.onContextDispose.invoke(this, { ctx: this.ctx });
+				//	return this.proxy.callbacks.onContextDispose.invoke(this.proxy, { ctx: this.ctx });
 
-				//})
+				//});
 
 
 
@@ -2273,7 +2274,7 @@ module utils {
 			}
 
 		})
-			.then(() => {
+			.finally(() => {
 				return ctx.proxy.callbacks.onContextDispose.invoke(ctx.proxy, { ctx: this.ctx });
 			});
 
