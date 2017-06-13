@@ -216,34 +216,34 @@ export class ActionBroadcast<TSender, TArgs>  {
 export class ProxyCallbacks {
 
 	/** do not throw errors (or reject promises) from subscriber callbacks here, or it will disrupt internal proxy handling logic (see ```proxy.ctor.defaultCallbacks``` for details) */
-	public onError = new ActionBroadcast<Proxy | ProxyFinalRequestFilter | ProxyFinalResponseFilter, { ctx?: IContext; err: Error; errorKind: string, data?: any }>("onError");
+	public onError = new ActionBroadcast<Proxy | ProxyFinalRequestFilter | ProxyFinalResponseFilter, { ctx?: Context; err: Error; errorKind: string, data?: any }>("onError");
 
 	/** triggered when the context is created, before any other context specific events are triggered. 
 check ctx.url.protocol to decide what events to bind.  http, https, or ws */
-	public onContextInitialize = new EventBroadcast<Proxy, { ctx: IContext; }, void>("onContextInitialize");
+	public onContextInitialize = new EventBroadcast<Proxy, { ctx: Context; }, void>("onContextInitialize");
 
-	public onWebSocketConnection = new EventBroadcast<Proxy, { ctx: IContext }, void>("onWebSocketConnection");
-	public onWebSocketFrame = new EventBroadcastPipe<WebSocket, { ctx: IContext;/** known types: "message" */ type: "message" | "ping" | "pong";/** true is from upstreamToProxy, false means from clientToProxy */ fromServer: boolean; data: any; flags: { binary: boolean }; }>("onWebSocketFrame");
+	public onWebSocketConnection = new EventBroadcast<Proxy, { ctx: Context }, void>("onWebSocketConnection");
+	public onWebSocketFrame = new EventBroadcastPipe<WebSocket, { ctx: Context;/** known types: "message" */ type: "message" | "ping" | "pong";/** true is from upstreamToProxy, false means from clientToProxy */ fromServer: boolean; data: any; flags: { binary: boolean }; }>("onWebSocketFrame");
 
-	public onWebSocketSend = new EventBroadcastPipe<WebSocket, { ctx: IContext;/** known types: "message" */ type: any;/**  */ fromServer: boolean; data: any; flags: any; }>("onWebSocketSend");
-	public onWebSocketMessage = new EventBroadcastPipe<WebSocket, { ctx: IContext;/** known types: "message" */ type: any;/**  */ fromServer: boolean; data: any; flags: any; }>("onWebSocketMessage");
+	public onWebSocketSend = new EventBroadcastPipe<WebSocket, { ctx: Context;/** known types: "message" */ type: any;/**  */ fromServer: boolean; data: any; flags: any; }>("onWebSocketSend");
+	public onWebSocketMessage = new EventBroadcastPipe<WebSocket, { ctx: Context;/** known types: "message" */ type: any;/**  */ fromServer: boolean; data: any; flags: any; }>("onWebSocketMessage");
 
 	/** do not throw errors (or reject promises) from subscriber callbacks here, or it will disrupt internal proxy handling logic (see ```proxy.ctor.defaultCallbacks``` for details) */
-	public onWebSocketClose = new EventBroadcastPipe<WebSocket, { ctx: IContext; /** if false, closed by client.*/closedByServer: boolean, code: number; message: string; }>("onWebSocketClose");
-	public onWebSocketError = new ActionBroadcast<Proxy | WebSocket, { ctx: IContext; err: Error, errorKind: string; }>("onWebSocketError");
-	public onRequest = new EventBroadcast<Proxy, { ctx: IContext }, void>("onRequest");
-	public onRequestHeaders = new EventBroadcast<Proxy, { ctx: IContext }, void>("onRequestHeaders");
-	public onRequestData = new EventBroadcastPipe<Proxy, { ctx: IContext, chunk: Buffer }>("onRequestData");
-	public onRequestEnd = new EventBroadcast<Proxy, { ctx: IContext }, void>("onRequestEnd");
+	public onWebSocketClose = new EventBroadcastPipe<WebSocket, { ctx: Context; /** if false, closed by client.*/closedByServer: boolean, code: number; message: string; }>("onWebSocketClose");
+	public onWebSocketError = new ActionBroadcast<Proxy | WebSocket, { ctx: Context; err: Error, errorKind: string; }>("onWebSocketError");
+	public onRequest = new EventBroadcast<Proxy, { ctx: Context }, void>("onRequest");
+	public onRequestHeaders = new EventBroadcast<Proxy, { ctx: Context }, void>("onRequestHeaders");
+	public onRequestData = new EventBroadcastPipe<Proxy, { ctx: Context, chunk: Buffer }>("onRequestData");
+	public onRequestEnd = new EventBroadcast<Proxy, { ctx: Context }, void>("onRequestEnd");
 
 	/** callback triggered by the ctx.proxyToServerRequest request when it's complete.   response is stored as ctx.serverToProxyResponse. */
-	public onResponse = new EventBroadcast<Proxy, { ctx: IContext }, void>("onResponse");
-	public onResponseHeaders = new EventBroadcast<Proxy, { ctx: IContext }, void>("onResponseHeaders");
-	public onResponseData = new EventBroadcastPipe<Proxy, { ctx: IContext, chunk: Buffer }>("onResponseData");
-	public onResponseEnd = new EventBroadcast<Proxy, { ctx: IContext }, void>("onResponseEnd");
+	public onResponse = new EventBroadcast<Proxy, { ctx: Context }, void>("onResponse");
+	public onResponseHeaders = new EventBroadcast<Proxy, { ctx: Context }, void>("onResponseHeaders");
+	public onResponseData = new EventBroadcastPipe<Proxy, { ctx: Context, chunk: Buffer }>("onResponseData");
+	public onResponseEnd = new EventBroadcast<Proxy, { ctx: Context }, void>("onResponseEnd");
 
 	/** allows retrying the request to upstream if desired (via the returned promise results), if so, the callbacks from ```onRequest``` onward will be retried.  */
-	public onProxyToUpstreamRequestError = new EventBroadcastLimited<http.ClientRequest, { ctx: IContext; err: Error; }, { retry?: boolean; }>("onProxyToUpstreamRequestError");
+	public onProxyToUpstreamRequestError = new EventBroadcastLimited<http.ClientRequest, { ctx: Context; err: Error; }, { retry?: boolean; }>("onProxyToUpstreamRequestError");
 
 
 	//proxy specific callbacks
@@ -256,7 +256,7 @@ check ctx.url.protocol to decide what events to bind.  http, https, or ws */
 	//new handle authorization
 	public onAuth = new EventBroadcastLimited<Proxy, { authPayload: string; isSsl: boolean; head: Buffer; req: http.IncomingMessage; socket: net.Socket; }, { isAuthorized: boolean; }>("onAuth");
 
-	public onContextDispose = new ActionBroadcast<ProxyFinalResponseFilter, { ctx: IContext }>("onContextDispose");
+	public onContextDispose = new ActionBroadcast<ProxyFinalResponseFilter, { ctx: Context }>("onContextDispose");
 
 }
 
@@ -735,7 +735,11 @@ export abstract class ContextCallbacks extends ProxyBase {
 
 
 
-export class IContext { // extends ContextCallbacks {
+export class Context {
+
+	constructor(public proxy: Proxy) { }
+
+	// extends ContextCallbacks {
 	/** options sent to WebSocket when connecting.   set by Proxy._onWebSocketServerConnect() (internal code, when a websocket connects) and you can override via proxy.onWebSocketConnection().
 	undefined and unused if not a websocket connection */
 	public proxyToServerWebSocketOptions: { url: string } & WebSocket.IClientOptions;// { url: string, agent: http.Agent | https.Agent, headers: { [key: string]: string } };
@@ -778,7 +782,7 @@ export class IContext { // extends ContextCallbacks {
 	public proxyToUpstreamTries = 0;
 	/** user defined tags, initially constructed in the proxy-internals.tx proxy.onRequest() callback, you can add what you like here. 
 	 by default, will be undefined.  you can set it in your proxy.onRequest() callback*/
-	tags: any
+	tags: any = {};
 
 	/** set when constructing the context (prior to proxy.onRequest() being called)  */
 	public url: urlModule.Url;
@@ -842,6 +846,7 @@ export class IContext { // extends ContextCallbacks {
 
 	public isDisposed = false;
 	public isClosed = false;
+	public lastError: { err: Error, errorKind: string } = undefined;
 
 }
 
@@ -887,7 +892,9 @@ export class Proxy {
 			defaultCallbacks = new ProxyCallbacks();
 			//if error detected, abort response with a 504 error.
 			defaultCallbacks.onError.subscribe((sender, args) => {
-				utils.closeClientRequestWithError(args.ctx, args.err, args.errorKind);
+				if (args.ctx != null) { //sometimes an error is thrown before a context is created, such as in .onConnect()
+					utils.closeClientRequestWithErrorAndDispose(args.ctx, args.err, args.errorKind);
+				}
 
 			});
 
@@ -899,7 +906,7 @@ export class Proxy {
 
 					if (ctx.isClosed != true) {
 						log.assert(false, "why wasn't this closed yet?");
-						utils.closeClientRequestWithError(ctx, new Error("context dispose and not yet closed"), "onContextDispose(), NOT_CLOSED");
+						utils.closeClientRequestWithErrorAndDispose(ctx, new Error("context dispose and not yet closed"), "onContextDispose(), NOT_CLOSED");
 					}
 				});
 
@@ -908,7 +915,7 @@ export class Proxy {
 
 			});
 
-			
+
 
 			//fork webSocketFrame messages for convenience.
 			defaultCallbacks.onWebSocketFrame.subscribe((sender, args) => {
@@ -943,7 +950,7 @@ export class Proxy {
 				});
 			});
 
-			const closeWebsocket = (ctx: IContext, code?: any, data?: any) => {
+			const closeWebsocket = (ctx: Context, code?: any, data?: any) => {
 				if (ctx.clientToProxyWebSocket.readyState !== ctx.proxyToServerWebSocket.readyState) {
 					if (ctx.clientToProxyWebSocket.readyState === WebSocket.CLOSED && ctx.proxyToServerWebSocket.readyState === WebSocket.OPEN) {
 						ctx.proxyToServerWebSocket.close(code, data);
@@ -1567,8 +1574,7 @@ export class Proxy {
 	private _onWebSocketServerConnect(isSSL, ws) {
 		//var this = this;
 
-		var ctx = new IContext();
-		ctx.tags = {};
+		var ctx = new Context();
 		ctx.isSSL = isSSL;
 		ctx.clientToProxyWebSocket = ws;
 
@@ -1670,8 +1676,7 @@ export class Proxy {
 		//var this = this;
 
 
-		var ctx = new IContext();
-		ctx.tags = {};
+		var ctx = new Context();
 		ctx.isSSL = isSSL;
 		ctx.clientToProxyRequest = clientToProxyRequest;
 		ctx.proxyToClientResponse = proxyToClientResponse;
@@ -1699,6 +1704,9 @@ export class Proxy {
 				//ctx.proxyToClientResponse.on('error', ctx._onError.bind(ctx, 'PROXY_TO_CLIENT_RESPONSE_ERROR', ctx));
 				ctx.proxyToClientResponse.on("error", (err) => { this.callbacks.onError.invoke(this, { err, errorKind: "PROXY_TO_CLIENT_RESPONSE_ERROR", ctx }); });
 
+
+				//ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
+				//ctx.clientToProxyRequest.on("end", (...args: any[]) => { log.error("ctx.clientToProxyRequest.on.end", args); });
 
 				var hostPort = utils.parseHostAndPort(ctx.clientToProxyRequest, ctx.isSSL ? 443 : 80);
 				var headers = {};
@@ -1874,7 +1882,7 @@ export class Proxy {
 class ProxyFinalRequestFilter extends events.EventEmitter {
 	public writable: boolean;
 
-	constructor(public proxy: Proxy, public ctx: IContext) {
+	constructor(public proxy: Proxy, public ctx: Context) {
 		super();
 		events.EventEmitter.call(this);
 		this.writable = true;
@@ -1897,7 +1905,7 @@ class ProxyFinalRequestFilter extends events.EventEmitter {
 
 		console.warn("ProxyFinalRequestFilter.write.attachPromise");
 
-		this.currentExecution = this.currentExecution.finally(() => {
+		this.currentExecution = this.currentExecution.then(() => {
 
 			console.warn("ProxyFinalRequestFilter.write");
 			return this.proxy.callbacks.onRequestData.invoke(this.proxy, { ctx: this.ctx, chunk })
@@ -1916,68 +1924,91 @@ class ProxyFinalRequestFilter extends events.EventEmitter {
 
 		return true;
 	};
+	public close(...args: any[]) {
 
+		ctx.clientToProxyRequest.on("close", () => { this.callbacks.onError.invoke(this, { err: new Error("client prematurely closed the connection"), errorKind: "CLIENT_TO_PROXY_REQUEST_CLOSE", ctx }); });
+
+
+	}
 
 	public end(chunk: Buffer) {
 
 
 		console.warn("ProxyFinalRequestFilter.end.attachPromise");
-		this.currentExecution = this.currentExecution.finally<any>(() => {
-			//const this = this;
-			if (chunk) {
-				console.warn("ProxyFinalRequestFilter.end.write");
-				//return this.ctx._onRequestData(this.ctx, chunk, (err, chunk) => {
-				//	if (err) {
-				//		//return this.ctx._onError('ON_REQUEST_DATA_ERROR', this.ctx, err);
-				//		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_DATA_ERROR", ctx: this.ctx, });
-				//		return Promise.reject(err);
-				//	}
+		this.currentExecution = this.currentExecution.then<any>(() => {
 
-				//	return this.ctx._onRequestEnd(this.ctx, (err) => {
-				//		if (err) {
-				//			//return this.ctx._onError('ON_REQUEST_END_ERROR', this.ctx, err);
-				//			this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
-				//			return Promise.reject(err);
-				//		}
-				//		return this.ctx.proxyToServerRequest.end(chunk);
-				//	});
-				//});
 
-				return this.proxy.callbacks.onRequestData.invoke(this.proxy, { ctx: this.ctx, chunk })
-					.then((args) => {
-						return this.proxy.callbacks.onRequestEnd.invoke(this.proxy, { ctx: this.ctx })
-							.then((args) => {
-								return new Promise((resolve) => { this.ctx.proxyToServerRequest.end(chunk, resolve); });
-							})
-					})
-					.catch((err) => {
-						this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
-						return Promise.reject(err);
-					})
+			console.warn("ProxyFinalRequestFilter.end.write");
+			return Promise.try(() => {
+				if (chunk != null) {
+					//if end had a chunk, do our normal request-data workflow firstly
+					return this.proxy.callbacks.onRequestData.invoke(this.proxy, { ctx: this.ctx, chunk });
+				}
+			})
+				.then(() => {
+					return this.proxy.callbacks.onRequestEnd.invoke(this.proxy, { ctx: this.ctx });
+				}).catch((err) => {
+					this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
+					return Promise.reject(err);
+				})
 
 
 
+			////////const this = this;
+			//////if (chunk) {
+			//////	console.warn("ProxyFinalRequestFilter.end.write");
+			//////	//return this.ctx._onRequestData(this.ctx, chunk, (err, chunk) => {
+			//////	//	if (err) {
+			//////	//		//return this.ctx._onError('ON_REQUEST_DATA_ERROR', this.ctx, err);
+			//////	//		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_DATA_ERROR", ctx: this.ctx, });
+			//////	//		return Promise.reject(err);
+			//////	//	}
 
-			} else {
-				console.warn("ProxyFinalRequestFilter.end.end");
-				//return this.ctx._onRequestEnd(this.ctx, (err) => {
-				//	if (err) {
-				//		//return this.ctx._onError('ON_REQUEST_END_ERROR', this.ctx, err);
-				//		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
-				//		return Promise.reject(err);
-				//	}
-				//	return this.ctx.proxyToServerRequest.end(chunk || undefined);
-				//});
+			//////	//	return this.ctx._onRequestEnd(this.ctx, (err) => {
+			//////	//		if (err) {
+			//////	//			//return this.ctx._onError('ON_REQUEST_END_ERROR', this.ctx, err);
+			//////	//			this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
+			//////	//			return Promise.reject(err);
+			//////	//		}
+			//////	//		return this.ctx.proxyToServerRequest.end(chunk);
+			//////	//	});
+			//////	//});
 
-				return this.proxy.callbacks.onRequestEnd.invoke(this.proxy, { ctx: this.ctx })
-					.then((args) => {
-						return new Promise((resolve) => { this.ctx.proxyToServerRequest.end(undefined, resolve); });
-					}).catch((err) => {
-						this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
-						return Promise.reject(err);
-					})
+			//////	return this.proxy.callbacks.onRequestData.invoke(this.proxy, { ctx: this.ctx, chunk })
+			//////		.then((args) => {
+			//////			return this.proxy.callbacks.onRequestEnd.invoke(this.proxy, { ctx: this.ctx })
+			//////				.then((args) => {
+			//////					return new Promise((resolve) => { this.ctx.proxyToServerRequest.end(chunk, resolve); });
+			//////				})
+			//////		})
+			//////		.catch((err) => {
+			//////			this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
+			//////			return Promise.reject(err);
+			//////		})
 
-			}
+
+
+
+			//////} else {
+			//////	console.warn("ProxyFinalRequestFilter.end.end");
+			//////	//return this.ctx._onRequestEnd(this.ctx, (err) => {
+			//////	//	if (err) {
+			//////	//		//return this.ctx._onError('ON_REQUEST_END_ERROR', this.ctx, err);
+			//////	//		this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
+			//////	//		return Promise.reject(err);
+			//////	//	}
+			//////	//	return this.ctx.proxyToServerRequest.end(chunk || undefined);
+			//////	//});
+
+			//////	return this.proxy.callbacks.onRequestEnd.invoke(this.proxy, { ctx: this.ctx })
+			//////		.then((args) => {
+			//////			return new Promise((resolve) => { this.ctx.proxyToServerRequest.end(undefined, resolve); });
+			//////		}).catch((err) => {
+			//////			this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_REQUEST_END_ERROR", ctx: this.ctx, });
+			//////			return Promise.reject(err);
+			//////		})
+
+			//////}
 		});
 	};
 }
@@ -1986,7 +2017,7 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 
 	public writable: boolean;
 
-	constructor(public proxy: Proxy, public ctx: IContext) {
+	constructor(public proxy: Proxy, public ctx: Context) {
 		super();
 		events.EventEmitter.call(this);
 		this.writable = true;
@@ -2049,17 +2080,18 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
 				})
 				.then(() => {
 					console.warn("ProxyFinalResponseFilter.end.write.actualEnd");
-					return utils.closeClientRequest({
+					return utils.closeClientRequestAndDispose({
 						ctx: this.ctx
 					});
 				})
 				.catch((err) => {
 					this.proxy.callbacks.onError.invoke(this, { err, errorKind: "ON_RESPONSE_END_ERROR", ctx: this.ctx, });
+					return Promise.reject(err);
 				})
-				.finally(() => {
-					return this.proxy.callbacks.onContextDispose.invoke(this, { ctx: this.ctx });
+				//.then(() => {
+				//	return this.proxy.callbacks.onContextDispose.invoke(this, { ctx: this.ctx });
 
-				})
+				//})
 
 
 
@@ -2141,7 +2173,7 @@ class ProxyFinalResponseFilter extends events.EventEmitter {
  */
 module utils {
 
-	export function closeClientRequestWithError(ctx: IContext, err: Error, errorKind: string) {
+	export function closeClientRequestWithErrorAndDispose(ctx: Context, err: Error, errorKind: string) {
 
 		//return new Promise((resolve) => {
 
@@ -2164,9 +2196,9 @@ module utils {
 		//	}
 		//});
 
-
+		ctx.lastError = { err, errorKind };
 		const message = `Proxy Error, closeClientRequestWithError():  ${errorKind}:  ${__.JSONX.inspectStringify(err)}`;
-		return closeClientRequest({
+		return closeClientRequestAndDispose({
 			ctx,
 			statusCode: 504,
 			statusReason: errorKind,
@@ -2182,8 +2214,8 @@ module utils {
 	 * @param 
 	 * @param 
 	 */
-	export function closeClientRequest(args: {
-		ctx: IContext;
+	export function closeClientRequestAndDispose(args: {
+		ctx: Context;
 		/** if not set, headers must have already been sent */
 		statusCode?: number; statusReason?: string; headers?: { [key: string]: string }; bodyMessage?: string;
 	}) {
@@ -2214,7 +2246,7 @@ module utils {
 					ctx.proxyToClientResponse.writeHead(args.statusCode, args.statusReason, args.headers);
 
 
-					
+
 
 				} else {
 					log.assert(args.statusCode == null, "headers already sent");
@@ -2229,7 +2261,10 @@ module utils {
 				return;
 			}
 
-		});
+		})
+			.then(() => {
+				return ctx.proxy.callbacks.onContextDispose.invoke(ctx.proxy, { ctx: this.ctx });
+			});
 
 	}
 
